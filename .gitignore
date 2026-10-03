@@ -1,0 +1,8 @@
+
+# Local agent harness (per-developer, not committed)
+.github/
+.vscode/
+.venv/
+
+# Design skill staging (local working copies)
+design/refs/
