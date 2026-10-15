@@ -48,10 +48,15 @@ pnpm build        # production builds; shell emits the federation host entry
 
 ## Containers
 
+Orchestrated from the **root** compose file (single start-up command, R3):
+
 ```sh
-cd frontend && docker compose up --build
-# shell → http://localhost:5000 (remotes on 5001/5002, gateway expected on :8000)
+docker compose up --build        # from the repository root
+# shell → http://localhost:5000 (remotes on 5001/5002, Kong gateway on :8000)
 ```
+
+The Dockerfiles in each package take the `frontend/` directory as build context
+and are wired in [../docker-compose.yml](../docker-compose.yml).
 
 ## Definition-of-done notes
 

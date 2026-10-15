@@ -1,0 +1,153 @@
+name: campus-pulse
+
+# Single orchestration file for the whole distributed system (R3).
+# One documented start-up command: `docker compose up --build`.
+#
+# Today: frontend (shell + 2 MFEs) and Kong (declarative config) start by
+# default. Backend services and their databases are profile-gated behind
+# `--profile backend` until each Go/Gin service lands — their build contexts
+# (services/*) are created in later phases.
+
+services:
+  # ---------- Frontend (React MFEs, Module Federation) ----------
+  shell:
+    build:
+      context: ./frontend
+      dockerfile: shell/Dockerfile
+      args:
+        VITE_STUDENT_MFE_URL: http://localhost:${STUDENT_MFE_PORT:-5001}
+        VITE_ORGANISER_MFE_URL: http://localhost:${ORGANISER_MFE_PORT:-5002}
+        VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+    ports:
+      - "${SHELL_PORT:-5000}:80"
+    depends_on:
+      - student-mfe
+      - organiser-mfe
+
+  student-mfe:
+    build:
+      context: ./frontend
+      dockerfile: student-mfe/Dockerfile
+      args:
+        VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+    ports:
+      - "${STUDENT_MFE_PORT:-5001}:80"
+
+  organiser-mfe:
+    build:
+      context: ./frontend
+      dockerfile: organiser-mfe/Dockerfile
+      args:
+        VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+    ports:
+      - "${ORGANISER_MFE_PORT:-5002}:80"
+
+  # ---------- API gateway (Kong, DB-less declarative mode) ----------
+  kong:
+    image: kong:3.8-alpine
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_LOG_LEVEL: info
+    volumes:
+      - ./gateway/kong.yml:/kong/kong.yml:ro
+    ports:
+      - "${KONG_PORT:-8000}:8000"
+    # Upstreams 503 until the backend profile services are running — expected.
+
+  # ---------- Backend (profile-gated until each service lands) ----------
+  # Each Go/Gin service has its own persistence (R1). Build contexts are
+  # created when the services are implemented.
+  user-service:
+    profiles: ["backend"]
+    build: ./services/user-service
+    environment:
+      DATABASE_URL: postgres://campus_pulse:campus_pulse@user-db:5432/users
+      PORT: "8080"
+    depends_on:
+      user-db:
+        condition: service_healthy
+
+  event-service:
+    profiles: ["backend"]
+    build: ./services/event-service
+    environment:
+      DATABASE_URL: postgres://campus_pulse:campus_pulse@event-db:5432/events
+      PORT: "8080"
+    depends_on:
+      event-db:
+        condition: service_healthy
+
+  registration-service:
+    profiles: ["backend"]
+    build: ./services/registration-service
+    environment:
+      DATABASE_URL: postgres://campus_pulse:campus_pulse@registration-db:5432/registrations
+      PORT: "8080"
+    depends_on:
+      registration-db:
+        condition: service_healthy
+
+  semantic-service:
+    profiles: ["backend"]
+    build: ./services/semantic-service
+    environment:
+      SPARQL_ENDPOINT: http://fuseki:3030/campus-pulse/sparql
+      PORT: "8080"
+    depends_on:
+      - fuseki
+
+  ticket-service:
+    profiles: ["backend"]
+    build: ./services/ticket-service
+    environment:
+      DATABASE_URL: postgres://campus_pulse:campus_pulse@ticket-db:5432/tickets
+      PORT: "8080"
+    depends_on:
+      ticket-db:
+        condition: service_healthy
+
+  # ---------- Persistence (one store per service) ----------
+  user-db: &postgres
+    profiles: ["backend"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: campus_pulse
+      POSTGRES_PASSWORD: campus_pulse
+      POSTGRES_DB: users
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campus_pulse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  event-db:
+    <<: *postgres
+    environment:
+      POSTGRES_USER: campus_pulse
+      POSTGRES_PASSWORD: campus_pulse
+      POSTGRES_DB: events
+
+  registration-db:
+    <<: *postgres
+    environment:
+      POSTGRES_USER: campus_pulse
+      POSTGRES_PASSWORD: campus_pulse
+      POSTGRES_DB: registrations
+
+  ticket-db:
+    <<: *postgres
+    environment:
+      POSTGRES_USER: campus_pulse
+      POSTGRES_PASSWORD: campus_pulse
+      POSTGRES_DB: tickets
+
+  # RDF triple store for the semantic layer (SPARQL endpoint)
+  fuseki:
+    profiles: ["backend"]
+    image: stain/jena-fuseki:5.2.0
+    environment:
+      ADMIN_PASSWORD: campus_pulse
+    ports:
+      - "${FUSEKI_PORT:-3030}:3030"
