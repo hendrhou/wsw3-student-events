@@ -39,7 +39,7 @@ built-in MSW mocks that implement the full API contract.
 
 ```sh
 docker compose up --build
-# → http://localhost:5000  (shell composing both MFEs)
+# → http://localhost:3000  (shell composing both MFEs)
 # → http://localhost:8000  (Kong gateway, /api/*)
 ```
 

@@ -19,7 +19,7 @@ services:
         VITE_ORGANISER_MFE_URL: http://localhost:${ORGANISER_MFE_PORT:-5002}
         VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
     ports:
-      - "${SHELL_PORT:-5000}:80"
+      - "${SHELL_PORT:-3000}:80"
     depends_on:
       - student-mfe
       - organiser-mfe
@@ -44,7 +44,7 @@ services:
 
   # ---------- API gateway (Kong, DB-less declarative mode) ----------
   kong:
-    image: kong:3.8-alpine
+    image: kong:3.9
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /kong/kong.yml

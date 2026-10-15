@@ -52,7 +52,7 @@ Orchestrated from the **root** compose file (single start-up command, R3):
 
 ```sh
 docker compose up --build        # from the repository root
-# shell → http://localhost:5000 (remotes on 5001/5002, Kong gateway on :8000)
+# shell → http://localhost:3000 (remotes on 5001/5002, Kong gateway on :8000)
 ```
 
 The Dockerfiles in each package take the `frontend/` directory as build context
