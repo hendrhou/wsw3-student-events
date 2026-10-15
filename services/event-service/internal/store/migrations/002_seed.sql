@@ -1,0 +1,32 @@
+-- Dev seeds (idempotent): the demo catalogue, mirroring frontend mock fixtures
+-- so the UI looks the same against the real backend.
+INSERT INTO events (id, title, category, short_description, about, event_date, start_time, end_time, venue, capacity_total, capacity_used, checked_in, lifecycle_status, organiser_id, organiser_name, competences, schedule, topics) VALUES
+  ('evt-sparql', 'Intro to SPARQL Workshop', 'Workshop', 'Hands-on SPARQL against the Campus Pulse event graph.',
+   'A hands-on introduction to querying RDF knowledge graphs with SPARQL. We will query the Campus Pulse event graph live, explore how student interests are modeled as ontology concepts, and finish by building a recommendation query from scratch. Bring a laptop — no prior semantic-web experience required.',
+   '2026-10-24', '14:00', '16:00', 'Building D, Room 2.14', 60, 42, 41, 'Published', 'usr_olga', 'Semantic Web Study Group',
+   '{"SPARQL querying","RDF modeling","OWL basics"}',
+   '[{"time":"14:00","item":"Welcome & setup"},{"time":"14:15","item":"RDF triples crash course"},{"time":"14:45","item":"Hands-on: querying the event graph"},{"time":"15:45","item":"Build a recommendation query"},{"time":"16:00","item":"Wrap-up & drinks"}]',
+   '{"semantic-web","sparql","linked-data"}'),
+  ('evt-vc-talk', 'Web 3.0: Verifiable Credentials Talk', 'Talk', 'How DIDs and VCs let anyone verify a credential without calling the issuer.',
+   'Decentralised identity in practice: DIDs, verifiable credentials, and live verification of a Campus Pulse ticket by a third-party verifier.',
+   '2026-10-28', '18:00', '19:30', 'Auditorium A', 120, 114, 0, 'Published', 'usr_olga', 'Web3 Lab',
+   '{"Verifiable credentials","Decentralised identity"}',
+   '[{"time":"18:00","item":"Talk"},{"time":"19:00","item":"Live verification demo"}]',
+   '{"web3"}'),
+  ('evt-hackathon', 'UFP Hackathon 2026', 'Hackathon', '24 hours of building with campus data.',
+   'Annual hackathon. This year''s theme: linked campus data.',
+   '2026-11-07', '09:00', '18:00', 'Main Hall', 120, 96, 0, 'Published', 'usr_olga', 'Computer Science Department',
+   '{"Teamwork","Rapid prototyping"}', '[{"time":"09:00","item":"Kickoff"}]', '{"linked-data","knowledge-graphs"}'),
+  ('evt-careers', 'Careers Fair: Tech Edition', 'Fair', 'Meet 40+ tech employers.',
+   'Tech employers on campus.', '2026-11-12', '10:00', '16:00', 'Campus Plaza', 300, 12, 0, 'Published', 'usr_olga', 'Careers Office',
+   '{"Networking"}', '[{"time":"10:00","item":"Doors open"}]', '{}'),
+  ('evt-ethics', 'AI Ethics Seminar', 'Seminar', 'Bias, transparency and accountability in ML systems.',
+   'Seminar on AI ethics.', '2026-11-19', '15:00', '17:00', 'Auditorium B', 60, 60, 0, 'Published', 'usr_olga', 'Philosophy Department',
+   '{"Critical thinking"}', '[{"time":"15:00","item":"Seminar"}]', '{}'),
+  ('evt-rdf-lab', 'RDF Knowledge Graphs Lab', 'Workshop', 'Model and query a small knowledge graph.',
+   'A practical RDF lab.', '2026-11-26', '10:00', '12:00', 'Lab 3', 24, 5, 0, 'Published', 'usr_olga', 'Semantic Web Study Group',
+   '{"RDF modeling"}', '[{"time":"10:00","item":"Lab session"}]', '{"rdf","knowledge-graphs"}'),
+  ('evt-reception', 'Welcome Reception', 'Social', 'Welcome event for new students.',
+   'Past welcome reception.', '2026-09-15', '18:00', '21:00', 'Main Hall', 180, 180, 178, 'Past', 'usr_olga', 'Student Union',
+   '{}', '[]', '{}')
+ON CONFLICT (id) DO NOTHING;
