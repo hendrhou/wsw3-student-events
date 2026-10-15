@@ -1,0 +1,50 @@
+graph TB
+    Client["👥 Client<br/>(Browser)"]
+    Shell["React Shell<br/>(MFE Compositor)"]
+    StudentMFE["Student MFE<br/>(Discovery, Registration, Tickets)"]
+    OrganiserMFE["Organiser MFE<br/>(Event Mgmt, Check-in)"]
+
+    Kong["Kong API Gateway<br/>(REST routing, auth)"]
+
+    UserService["user-service<br/>(Go/Gin)<br/>Users, Roles, Interests"]
+    EventService["event-service<br/>(Go/Gin)<br/>Events, Venues, Capacity"]
+    RegService["registration-service<br/>(Go/Gin)<br/>Registrations, Check-in"]
+    SemanticService["semantic-service<br/>(Go/Gin)<br/>RDF, SPARQL, Recommendations"]
+    TicketService["ticket-service<br/>(Go/Gin)<br/>Tickets, Verifiable Credentials"]
+
+    UserDB["User DB<br/>(PostgreSQL)"]
+    EventDB["Event DB<br/>(PostgreSQL)"]
+    RegDB["Registration DB<br/>(PostgreSQL)"]
+    RDFStore["RDF Store<br/>(Apache Jena Fuseki)"]
+    TicketDB["Ticket DB<br/>(PostgreSQL)"]
+
+    ExtSources["External Data Sources<br/>Wikidata, Academic Data"]
+
+    Client -->|interacts| Shell
+    Shell -->|composes| StudentMFE
+    Shell -->|composes| OrganiserMFE
+    StudentMFE -->|REST/JSON| Kong
+    OrganiserMFE -->|REST/JSON| Kong
+
+    Kong -->|routes| UserService
+    Kong -->|routes| EventService
+    Kong -->|routes| RegService
+    Kong -->|routes| SemanticService
+    Kong -->|routes| TicketService
+
+    UserService -->|persists| UserDB
+    EventService -->|persists| EventDB
+    RegService -->|persists| RegDB
+    TicketService -->|persists| TicketDB
+    SemanticService -->|queries| RDFStore
+
+    UserService -.->|data| SemanticService
+    EventService -.->|data| SemanticService
+    RegService -.->|data| SemanticService
+
+    ExtSources -->|enrichment| SemanticService
+
+    style Kong fill:#0066cc,color:#fff
+    style SemanticService fill:#cc6600,color:#fff
+    style TicketService fill:#009900,color:#fff
+    style RDFStore fill:#cc6600,color:#fff

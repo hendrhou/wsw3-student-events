@@ -1,0 +1,38 @@
+graph LR
+    StudentMFE["Student MFE"]
+    OrganiserMFE["Organiser MFE"]
+
+    subgraph Services["Microservices"]
+        UserService["user-service<br/>👤"]
+        EventService["event-service<br/>📅"]
+        RegService["registration-service<br/>✓"]
+        SemanticService["semantic-service<br/>🧠"]
+        TicketService["ticket-service<br/>🎫"]
+    end
+
+    StudentMFE -->|authenticate| UserService
+    StudentMFE -->|discover events| EventService
+    StudentMFE -->|register| RegService
+    StudentMFE -->|get recommendations| SemanticService
+    StudentMFE -->|view/download tickets| TicketService
+
+    OrganiserMFE -->|authenticate| UserService
+    OrganiserMFE -->|create/manage events| EventService
+    OrganiserMFE -->|view registrations| RegService
+    OrganiserMFE -->|check-in participants| RegService
+
+    RegService -->|verify capacity| EventService
+    RegService -->|log activity| UserService
+
+    TicketService -->|verify registration| RegService
+    TicketService -->|issue credential| UserService
+
+    SemanticService -->|consume event data| EventService
+    SemanticService -->|consume user data| UserService
+    SemanticService -->|consume registrations| RegService
+
+    style UserService fill:#2196F3,color:#fff
+    style EventService fill:#FF9800,color:#fff
+    style RegService fill:#4CAF50,color:#fff
+    style SemanticService fill:#9C27B0,color:#fff
+    style TicketService fill:#F44336,color:#fff
