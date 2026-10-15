@@ -199,6 +199,9 @@ importers:
         specifier: ^5.0.2
         version: 5.0.15(@types/react@19.3.0)(react@19.3.1)
     devDependencies:
+      '@campus-pulse/mocks':
+        specifier: workspace:*
+        version: link:../packages/mocks
       '@module-federation/vite':
         specifier: ^1.2.7
         version: 1.23.5(typescript@5.9.3)(vite@6.4.4(@types/node@26.6.5))
@@ -211,6 +214,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.7.0(vite@6.4.4(@types/node@26.6.5))
+      msw:
+        specifier: ^2.7.0
+        version: 2.15.0(@types/node@26.6.5)(typescript@5.9.3)
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
