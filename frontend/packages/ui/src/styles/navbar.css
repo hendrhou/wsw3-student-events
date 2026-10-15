@@ -5,8 +5,7 @@
   z-index: var(--cp-z-sticky-nav);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--cp-space-6);
+  gap: var(--cp-space-8);
   height: 64px;
   padding: 0 var(--cp-space-8);
   background: var(--cp-brand-white);
@@ -15,6 +14,7 @@
 .cp-navbar__brand { display: flex; align-items: center; gap: var(--cp-space-3); text-decoration: none; }
 .cp-navbar__logo { height: 32px; width: auto; display: block; }
 .cp-navbar__appname { font: var(--cp-text-h3); color: var(--cp-text-primary); }
+/* Tab links sit left, right after the brand — right cluster pinned to the end */
 .cp-navbar__items { display: flex; align-items: stretch; gap: var(--cp-space-6); height: 100%; }
 .cp-navbar__item {
   display: flex;
@@ -29,7 +29,7 @@
 .cp-navbar__item:hover { color: var(--cp-text-primary); }
 .cp-navbar__item--active { color: var(--cp-brand-primary); border-bottom-color: var(--cp-brand-primary); }
 .cp-navbar__item:focus-visible { outline: 2px solid var(--cp-focus-ring); outline-offset: 2px; }
-.cp-navbar__right { display: flex; align-items: center; gap: var(--cp-space-4); }
+.cp-navbar__right { display: flex; align-items: center; gap: var(--cp-space-4); margin-left: auto; }
 .cp-navbar__icon-btn {
   position: relative;
   display: inline-flex;
