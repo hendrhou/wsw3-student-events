@@ -1,0 +1,25 @@
+{
+  "name": "@campus-pulse/mocks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@campus-pulse/api": "workspace:*"
+  },
+  "devDependencies": {
+    "msw": "^2.7.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  },
+  "peerDependencies": {
+    "msw": "^2.7.0"
+  }
+}
