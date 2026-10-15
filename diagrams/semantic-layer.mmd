@@ -1,0 +1,53 @@
+graph LR
+    subgraph Sources["Data Sources"]
+        Internal["📚 Internal Event<br/>Catalogue"]
+        Academic["🎓 Academic<br/>Programme Data"]
+        Wikidata["🌐 Wikidata<br/>Enrichment"]
+    end
+
+    subgraph Transform["RDF Transformation"]
+        Parser["Extract & Parse"]
+        Mapper["Map to Ontology"]
+        Align["Align Concepts"]
+    end
+
+    subgraph SemanticLayer["Semantic Layer"]
+        Ontology["OWL Domain<br/>Ontology"]
+        RDFStore["RDF Triple Store<br/>(Fuseki)"]
+        Reasoner["Reasoner<br/>(Consistency check)"]
+    end
+
+    subgraph Query["Query & Reasoning"]
+        SPARQL["SPARQL Endpoint"]
+        Queries["Competency<br/>Questions"]
+    end
+
+    subgraph Apps["Applications"]
+        Recommendations["Event<br/>Recommendations"]
+        Discovery["Event<br/>Discovery"]
+        Analytics["Participation<br/>Analytics"]
+    end
+
+    Internal -->|heterogeneous<br/>data| Parser
+    Academic -->|heterogeneous<br/>data| Parser
+    Wikidata -->|enrichment| Parser
+
+    Parser -->|transform| Mapper
+    Mapper -->|align| Align
+
+    Align -->|load| RDFStore
+    Ontology -->|validate| Reasoner
+    RDFStore -->|reason| Reasoner
+
+    SPARQL -->|query| RDFStore
+    Queries -->|execute| SPARQL
+
+    SPARQL -->|results| Recommendations
+    SPARQL -->|results| Discovery
+    SPARQL -->|results| Analytics
+
+    style Sources fill:#90CAF9,color:#000
+    style Transform fill:#FFA726,color:#fff
+    style SemanticLayer fill:#BA68C8,color:#fff
+    style Query fill:#81C784,color:#fff
+    style Apps fill:#FFD54F,color:#000
