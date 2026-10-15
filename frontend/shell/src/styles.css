@@ -48,6 +48,39 @@ body { margin: 0; }
 
 .cp-chips-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cp-space-2); }
 
+/* Avatar account menu (navbar): Profile · Log out per design/components.md. */
+.cp-usermenu { position: relative; }
+.cp-usermenu__pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--cp-space-2));
+  min-width: 180px;
+  background: var(--cp-brand-white);
+  border: var(--cp-border-default);
+  border-radius: var(--cp-radius-md);
+  box-shadow: var(--cp-shadow-2);
+  z-index: var(--cp-z-overlay);
+  padding: var(--cp-space-1);
+  display: flex;
+  flex-direction: column;
+}
+.cp-usermenu__item {
+  appearance: none;
+  background: none;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  font: var(--cp-text-body);
+  color: var(--cp-text-primary);
+  padding: var(--cp-space-2) var(--cp-space-3);
+  border-radius: var(--cp-radius-sm);
+  cursor: pointer;
+}
+.cp-usermenu__item:hover { background: var(--cp-neutral-100); }
+.cp-usermenu__item:focus-visible { outline: 2px solid var(--cp-focus-ring); outline-offset: -2px; }
+.cp-usermenu__item--danger { color: var(--cp-error); }
+.cp-usermenu__sep { border-top: var(--cp-border-default); margin: var(--cp-space-1) 0; }
+
 .cp-search {
   display: flex;
   align-items: center;
