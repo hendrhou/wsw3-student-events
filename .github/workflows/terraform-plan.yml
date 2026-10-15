@@ -1,0 +1,47 @@
+name: Terraform Plan
+
+# On PRs touching infra: validate and post the plan as a self-updating PR
+# comment. Read-only — this workflow can never apply anything.
+
+on:
+  pull_request:
+    paths: ["infra/terraform/**"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Format check
+        run: terraform fmt -check -recursive ../..
+      - name: Init + validate
+        run: terraform init -backend=false && terraform validate
+      - name: Plan (no credentials → static plan of the module graph)
+        run: terraform plan -input=false -no-color -out=tfplan 2>&1 | tee plan.txt || true
+      - name: Show plan text
+        run: terraform show -no-color tfplan > show.txt 2>/dev/null || cp plan.txt show.txt || true
+      - name: Comment the plan on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            let body = "";
+            try { body = fs.readFileSync("infra/terraform/envs/prod/show.txt", "utf8"); } catch { body = "(plan output unavailable)"; }
+            if (body.length > 60000) body = body.slice(0, 60000) + "\n…(truncated)";
+            const marker = "<!-- terraform-plan -->";
+            const comment = `${marker}\n### Terraform plan — \`${context.sha.slice(0, 7)}\`\n\n<details><summary>Plan output</summary>\n\n\`\`\`\n${body}\n\`\`\`\n</details>`;
+            const { data: comments } = await github.rest.issues.listComments({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body: comment });
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: comment });
+            }
