@@ -142,26 +142,45 @@ Touch targets: minimum 44×44px; minimum 8px spacing between targets. Icons: sin
 
 ## 6. Figma execution plan
 
-> **Figma MCP tools (`use_figma`, `generate_figma_design`, `get_design_context`) were
-> NOT available in this session**, so no Figma file was created or modified. The plan
-> below follows the `figma-generate-design` workflow order exactly; execute it once
-> the Figma MCP server is connected and authenticated.
+> **Status (2026-10-03): EXECUTED.** The file exists: **Campus Pulse — MFE Design**,
+> fileKey `0N9qpbkrmqWA075IyiyC9K`,
+> https://www.figma.com/design/0N9qpbkrmqWA075IyiyC9K (owner: Vítor's Figma
+> account, Starter team "Vítor de Carvalho's team"). Two deviations from the plan
+> below, both forced by the Starter plan:
+>
+> 1. **3 pages max** → structure is `0 — Cover & Tokens`, `1 — Components`,
+>    `2 — Screens` (student/organiser × desktop/mobile separated by Figma
+>    sections: "Student MFE — Desktop", "Organiser MFE — Desktop",
+>    "Student MFE — Mobile (375)", "Organiser MFE — Mobile (375)").
+> 2. **MCP tool-call quota was exhausted** before the final visual-fix pass.
+>    One known cosmetic issue remains: the `Navbar` component's tab label
+>    padding (20/18) makes the tab block 56px + 24px vertical padding exceed
+>    the 64px bar, so tab labels overflow slightly above the navbar on screens.
+>    Fix when quota resets: on component `5:70`, set each `Tab/*` child's
+>    `paddingTop = 12`, `paddingBottom = 10` (or drop navbar vertical padding).
+>
+> Everything else was completed: both variable collections, all 8 text styles
+> (Roboto Condensed Bold/SemiBold + Inter Regular/Medium/Semi Bold verified),
+> 3 elevation styles, 13 local components (Logo/UFP from the real SVG, Button
+> 4×4 variant set, Badge ×6, Navbar, Input, Select, FilterChip, ProgressBar,
+> EventCard, RecommendationCard, StatCard, TicketCard, CredentialCard, Modal,
+> Table, Toast, EmptyState), all 9 screens at 1440px plus 375px mobile variants
+> (18 wrappers), all colors/radii/paddings bound to variables, UFP logo in
+> every navbar instance.
 
 ### 6.0 Prerequisites
 
 1. Connect the Figma MCP server and confirm authentication. If auth is required, stop and ask the user to complete it.
-2. Create a new file via `/figma-create-new-file` (or `create_new_file`): name **"Campus Pulse — MFE Design"**. Reuse the returned `fileKey` for everything below.
+2. Create a new file via `/figma-create-new-file` (or `create_new_file`): name **"Campus Pulse — MFE Design"**. Reuse the returned `fileKey` for everything below. *(Done — fileKey `0N9qpbkrmqWA075IyiyC9K`.)*
 3. Load the `figma-use` skill before any `use_figma` call; pass `skillNames: "figma-use,figma-generate-design"`.
 
 ### 6.1 File & page structure
 
 | Page | Contents |
 |---|---|
-| `0 — Cover` | Project title, UFP logo (import [logo_ufp_site.svg](logo_ufp_site.svg) via `figma.createNodeFromSvg`), version, date |
-| `1 — Tokens` | Variable collections + text/effect styles (§6.2) |
-| `2 — Components` | Local components from [components.md](components.md): Button, Card, Navbar, Input, Select, Badge/Tag, Modal, Table, Toast, EmptyState, CredentialCard |
-| `3 — Student MFE` | 5 screens at 1440px width + 375px mobile variants (see [student-mfe.md](student-mfe.md)) |
-| `4 — Organiser MFE` | 4 screens at 1440px + 375px variants (see [organiser-mfe.md](organiser-mfe.md)) |
+| `0 — Cover & Tokens` | Project title, UFP logo (import [logo_ufp_site.svg](logo_ufp_site.svg) via `figma.createNodeFromSvg`), version, date, token swatches + type ramp |
+| `1 — Components` | Local components from [components.md](components.md): Button, Card, Navbar, Input, Select, Badge/Tag, Modal, Table, Toast, EmptyState, CredentialCard |
+| `2 — Screens` | Student S1–S5 + Organiser O1–O4 at 1440px and 375px, grouped in 4 sections (Starter plan allows only 3 pages) |
 
 ### 6.2 Variables & styles (create first — one `use_figma` call per collection)
 
