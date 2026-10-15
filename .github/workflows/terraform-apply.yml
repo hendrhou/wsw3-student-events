@@ -1,0 +1,31 @@
+name: Terraform Apply
+
+# Manual only. Applies the production environment after human review.
+# The `production` environment protection rule forces an approval click.
+# Nothing here runs on push or on PRs — ever.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # AWS OIDC
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Init (real backend)
+        run: terraform init
+      - name: Apply
+        run: terraform apply -input=false -auto-approve
