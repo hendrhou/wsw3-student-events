@@ -67,6 +67,13 @@ services:
     environment:
       DATABASE_URL: postgres://campus_pulse:campus_pulse@user-db:5432/users
       PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
+      FRONTEND_URL: http://localhost:${SHELL_PORT:-3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: http://localhost:${KONG_PORT:-8000}/api/auth/google/callback
+      ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-true}
+      SEMANTIC_SERVICE_URL: http://semantic-service:8080
     depends_on:
       user-db:
         condition: service_healthy
@@ -79,6 +86,8 @@ services:
     environment:
       DATABASE_URL: postgres://campus_pulse:campus_pulse@event-db:5432/events
       PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
+      SEMANTIC_SERVICE_URL: http://semantic-service:8080
     depends_on:
       event-db:
         condition: service_healthy
@@ -91,6 +100,9 @@ services:
     environment:
       DATABASE_URL: postgres://campus_pulse:campus_pulse@registration-db:5432/registrations
       PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
+      EVENT_SERVICE_URL: http://event-service:8080
+      TICKET_SERVICE_URL: http://ticket-service:8080
     depends_on:
       registration-db:
         condition: service_healthy
@@ -102,7 +114,12 @@ services:
       dockerfile: semantic-service/Dockerfile
     environment:
       SPARQL_ENDPOINT: http://fuseki:3030/campus-pulse/sparql
+      SPARQL_UPDATE_ENDPOINT: http://fuseki:3030/campus-pulse/update
+      FUSEKI_USER: admin
+      FUSEKI_PASSWORD: campus_pulse
       PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
+      EVENT_SERVICE_URL: http://event-service:8080
     depends_on:
       - fuseki
 
@@ -114,6 +131,9 @@ services:
     environment:
       DATABASE_URL: postgres://campus_pulse:campus_pulse@ticket-db:5432/tickets
       PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
+      REGISTRATION_SERVICE_URL: http://registration-service:8080
+      PUBLIC_BASE_URL: http://localhost:${KONG_PORT:-8000}
     depends_on:
       ticket-db:
         condition: service_healthy
