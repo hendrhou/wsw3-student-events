@@ -1,0 +1,23 @@
+
+# Local agent harness (per-developer, not committed)
+.github/
+.vscode/
+.venv/
+
+# Design skill staging (local working copies)
+design/refs/
+
+# Environment files with secrets (keep only .env.example)
+.env
+*.env
+!.env.example
+
+# Node / frontend
+node_modules/
+dist/
+*.local
+
+# Test output
+coverage/
+playwright-report/
+test-results/
