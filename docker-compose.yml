@@ -176,7 +176,7 @@ services:
   # RDF triple store for the semantic layer (SPARQL endpoint)
   fuseki:
     profiles: ["backend"]
-    image: stain/jena-fuseki:5.2.0
+    image: stain/jena-fuseki:5.1.0
     environment:
       ADMIN_PASSWORD: campus_pulse
     ports:

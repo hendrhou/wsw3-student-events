@@ -1,0 +1,37 @@
+# Seed events as RDF (aligned with the ontology). Loaded only when the store
+# is empty; live data afterwards arrives via push-on-write ingestion.
+@prefix cp:   <https://campus-pulse.ufp.pt/ontology#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<https://campus-pulse.ufp.pt/events/evt-sparql> a cp:Event ;
+    cp:eventTitle "Intro to SPARQL Workshop" ;
+    cp:eventCategory "Workshop" ;
+    cp:eventDate "2026-10-24"^^xsd:date ;
+    cp:venueName "Building D, Room 2.14" ;
+    cp:hasTopic cp:SemanticWeb, cp:SPARQL, cp:LinkedData .
+
+<https://campus-pulse.ufp.pt/events/evt-vc-talk> a cp:Event ;
+    cp:eventTitle "Web 3.0: Verifiable Credentials Talk" ;
+    cp:eventCategory "Talk" ;
+    cp:eventDate "2026-10-28"^^xsd:date ;
+    cp:venueName "Auditorium A" ;
+    cp:hasTopic cp:Web3 .
+
+<https://campus-pulse.ufp.pt/events/evt-hackathon> a cp:Event ;
+    cp:eventTitle "UFP Hackathon 2026" ;
+    cp:eventCategory "Hackathon" ;
+    cp:eventDate "2026-11-07"^^xsd:date ;
+    cp:venueName "Main Hall" ;
+    cp:hasTopic cp:LinkedData, cp:KnowledgeGraphs .
+
+<https://campus-pulse.ufp.pt/events/evt-rdf-lab> a cp:Event ;
+    cp:eventTitle "RDF Knowledge Graphs Lab" ;
+    cp:eventCategory "Workshop" ;
+    cp:eventDate "2026-11-26"^^xsd:date ;
+    cp:venueName "Lab 3" ;
+    cp:hasTopic cp:RDF, cp:KnowledgeGraphs .
+
+# Demo user interests (Vítor): Semantic Web + Web 3.0
+<https://campus-pulse.ufp.pt/users/usr_vitor> a cp:Participant ;
+    cp:userName "Vítor Carvalho" ;
+    cp:hasInterest cp:SemanticWeb, cp:Web3 .

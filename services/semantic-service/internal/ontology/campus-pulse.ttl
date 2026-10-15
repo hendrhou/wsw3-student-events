@@ -1,0 +1,45 @@
+# Campus Pulse domain ontology (working Turtle version).
+# The Protégé-authored OWL deliverable (R6) lands separately and aligns with
+# these classes/properties; this file is what semantic-service loads at boot.
+@prefix cp:   <https://campus-pulse.ufp.pt/ontology#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+cp:Ontology a owl:Ontology ;
+    rdfs:label "Campus Pulse Ontology" ;
+    rdfs:comment "Student events, venues, organisers, registrations and interest topics for semantic recommendations." .
+
+# ---------- Classes ----------
+cp:Event       a owl:Class ; rdfs:label "Event" .
+cp:Venue       a owl:Class ; rdfs:label "Venue" .
+cp:Organiser   a owl:Class ; rdfs:label "Organiser" .
+cp:Participant a owl:Class ; rdfs:label "Participant" .
+cp:Registration a owl:Class ; rdfs:label "Registration" .
+cp:Topic       a owl:Class ; rdfs:label "Topic" ;
+    rdfs:comment "Interest concept. Student interests and event tags both point at Topics — that shared vocabulary is what makes the recommendation SPARQL trivially explainable." .
+
+# ---------- Object properties ----------
+cp:hasTopic     a owl:ObjectProperty ; rdfs:label "has topic" .
+cp:hasInterest  a owl:ObjectProperty ; rdfs:domain cp:Participant ; rdfs:range cp:Topic ; rdfs:label "has interest" .
+cp:hostedAt     a owl:ObjectProperty ; rdfs:domain cp:Event ; rdfs:range cp:Venue ; rdfs:label "hosted at" .
+cp:organizedBy  a owl:ObjectProperty ; rdfs:domain cp:Event ; rdfs:range cp:Organiser ; rdfs:label "organized by" .
+cp:registeredFor a owl:ObjectProperty ; rdfs:domain cp:Registration ; rdfs:range cp:Event ; rdfs:label "registered for" .
+cp:registeredBy  a owl:ObjectProperty ; rdfs:domain cp:Registration ; rdfs:range cp:Participant ; rdfs:label "registered by" .
+
+# ---------- Datatype properties ----------
+cp:eventTitle  a owl:DatatypeProperty ; rdfs:domain cp:Event ; rdfs:range xsd:string .
+cp:eventDate   a owl:DatatypeProperty ; rdfs:domain cp:Event ; rdfs:range xsd:date .
+cp:eventCategory a owl:DatatypeProperty ; rdfs:domain cp:Event ; rdfs:range xsd:string .
+cp:venueName   a owl:DatatypeProperty ; rdfs:domain cp:Event ; rdfs:range xsd:string .
+cp:topicLabel  a owl:DatatypeProperty ; rdfs:domain cp:Topic ; rdfs:range xsd:string .
+cp:userName    a owl:DatatypeProperty ; rdfs:domain cp:Participant ; rdfs:range xsd:string .
+
+# ---------- Topics (the interest vocabulary; values match the frontend) ----------
+cp:SemanticWeb      a cp:Topic ; cp:topicLabel "Semantic Web" .
+cp:LinkedData       a cp:Topic ; cp:topicLabel "Linked Data" .
+cp:Web3             a cp:Topic ; cp:topicLabel "Web 3.0" .
+cp:SPARQL           a cp:Topic ; cp:topicLabel "SPARQL" .
+cp:KnowledgeGraphs  a cp:Topic ; cp:topicLabel "Knowledge Graphs" .
+cp:RDF              a cp:Topic ; cp:topicLabel "RDF" .
