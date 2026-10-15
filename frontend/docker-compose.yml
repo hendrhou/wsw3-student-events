@@ -1,0 +1,35 @@
+# Campus Pulse frontend containers (R3). This file will be merged into the
+# root compose with Kong + the five Go services as they land — the single
+# documented start-up command remains `docker compose up --build`.
+services:
+  shell:
+    build:
+      context: ./
+      dockerfile: shell/Dockerfile
+      args:
+        VITE_STUDENT_MFE_URL: http://localhost:5001
+        VITE_ORGANISER_MFE_URL: http://localhost:5002
+        VITE_GATEWAY_URL: http://localhost:8000/api
+    ports:
+      - "5000:80"
+    depends_on:
+      - student-mfe
+      - organiser-mfe
+
+  student-mfe:
+    build:
+      context: ./
+      dockerfile: student-mfe/Dockerfile
+      args:
+        VITE_GATEWAY_URL: http://localhost:8000/api
+    ports:
+      - "5001:80"
+
+  organiser-mfe:
+    build:
+      context: ./
+      dockerfile: organiser-mfe/Dockerfile
+      args:
+        VITE_GATEWAY_URL: http://localhost:8000/api
+    ports:
+      - "5002:80"
