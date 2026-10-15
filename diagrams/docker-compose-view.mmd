@@ -1,0 +1,51 @@
+graph TB
+    subgraph Docker["Docker Compose Network"]
+        subgraph Services["Microservices"]
+            Kong["Kong<br/>API Gateway<br/>:8000, :8443"]
+            User["user-service<br/>:3001"]
+            Event["event-service<br/>:3002"]
+            Reg["registration-service<br/>:3003"]
+            Semantic["semantic-service<br/>:3004"]
+            Ticket["ticket-service<br/>:3005"]
+        end
+
+        subgraph Data["Data & Storage"]
+            UserDB["PostgreSQL<br/>user-db<br/>:5432"]
+            EventDB["PostgreSQL<br/>event-db<br/>:5432"]
+            RegDB["PostgreSQL<br/>reg-db<br/>:5432"]
+            TicketDB["PostgreSQL<br/>ticket-db<br/>:5432"]
+            RDFStore["Jena Fuseki<br/>RDF Store<br/>:3030"]
+        end
+
+        subgraph Frontend["Frontend"]
+            React["React Shell<br/>+ MFEs<br/>:3000"]
+        end
+
+        Kong -->|routes| User
+        Kong -->|routes| Event
+        Kong -->|routes| Reg
+        Kong -->|routes| Semantic
+        Kong -->|routes| Ticket
+
+        React -->|REST| Kong
+
+        User -->|persist| UserDB
+        Event -->|persist| EventDB
+        Reg -->|persist| RegDB
+        Ticket -->|persist| TicketDB
+        Semantic -->|query| RDFStore
+
+        User -.->|data| Semantic
+        Event -.->|data| Semantic
+        Reg -.->|data| Semantic
+    end
+
+    External["External<br/>Data Sources<br/>(Wikidata,<br/>Academic APIs)"]
+    External -.->|fetch| Semantic
+
+    HostMachine["Host Machine<br/>localhost"]
+    HostMachine -->|docker-compose up| Docker
+
+    style Kong fill:#0066cc,color:#fff
+    style React fill:#61dafb,color:#000
+    style RDFStore fill:#cc6600,color:#fff

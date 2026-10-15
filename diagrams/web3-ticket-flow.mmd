@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant Student
+    participant StudentMFE
+    participant RegService
+    participant TicketService
+    participant Blockchain
+
+    Note over Blockchain: Test Network (Credential Registry)
+
+    Student ->> StudentMFE: Request ticket for attended event
+    StudentMFE ->> RegService: Verify attendance and registration
+    RegService -->> StudentMFE: Attendance confirmed
+    StudentMFE ->> TicketService: Request credential issuance
+
+    activate TicketService
+        TicketService ->> TicketService: Generate verifiable credential (JWT/JSON-LD)
+        TicketService ->> TicketService: Sign with issuer key
+        TicketService ->> Blockchain: Register credential metadata (optional)
+        Blockchain -->> TicketService: Tx receipt / registry entry
+        TicketService ->> TicketService: Store credential and proof
+    deactivate TicketService
+
+    TicketService -->> StudentMFE: Credential + proof returned
+    StudentMFE -->> Student: Display and download credential
+
+    Student ->> Blockchain: Third party verifies credential (issuer signature, timestamp)
+    Blockchain -->> Student: Valid - no central query needed
