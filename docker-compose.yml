@@ -18,6 +18,9 @@ services:
         VITE_STUDENT_MFE_URL: http://localhost:${STUDENT_MFE_PORT:-5001}
         VITE_ORGANISER_MFE_URL: http://localhost:${ORGANISER_MFE_PORT:-5002}
         VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+        # Containers default to the real backend through Kong; set
+        # VITE_USE_MSW=true in .env to run the frontend against MSW mocks.
+        VITE_USE_MSW: ${VITE_USE_MSW:-false}
     ports:
       - "${SHELL_PORT:-3000}:80"
     depends_on:
