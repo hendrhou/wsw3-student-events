@@ -26,3 +26,9 @@ variable "enable_backend_services" {
   default     = false
   description = "Create the five Go service ECS services. Flip to true when the backend lands."
 }
+
+variable "admin_emails" {
+  type        = list(string)
+  default     = []
+  description = "@ufp.edu.pt emails provisioned as Campus Pulse admins at user-service startup. Admins manage organisers in-app (Team screen); this list is the only way in for admins."
+}
