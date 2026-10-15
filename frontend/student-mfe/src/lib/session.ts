@@ -5,7 +5,7 @@
 export interface StoredUser {
   name: string;
   studentNumber: string;
-  role: "user" | "organiser";
+  role: "user" | "organiser" | "admin";
 }
 
 export function getStoredUser(): StoredUser | null {

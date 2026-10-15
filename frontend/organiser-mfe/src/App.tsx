@@ -5,6 +5,7 @@ import { Dashboard } from "./screens/Dashboard";
 import { EventForm } from "./screens/EventForm";
 import { Registrations } from "./screens/Registrations";
 import { CheckIn } from "./screens/CheckIn";
+import { Team } from "./screens/Team";
 
 /**
  * organiser-mfe routes (organiser-mfe.md). Relative paths: the shell mounts
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="events/:eventId/edit" element={<EventForm mode="edit" />} />
         <Route path="events/:eventId/registrations" element={<Registrations />} />
         <Route path="events/:eventId/check-in" element={<CheckIn />} />
+        <Route path="team" element={<Team />} />
         <Route path="*" element={<Navigate to="." replace />} />
       </Routes>
     </>

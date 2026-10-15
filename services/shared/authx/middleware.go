@@ -29,6 +29,8 @@ func RequireAuth(issuer *Issuer) gin.HandlerFunc {
 }
 
 // RequireRole rejects authenticated users without the role (403).
+// Role hierarchy: admin is a superset of organiser, so an admin passes
+// RequireRole("organiser"); RequireRole("admin") is strict.
 func RequireRole(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims := GetClaims(c)
@@ -36,12 +38,19 @@ func RequireRole(role string) gin.HandlerFunc {
 			httpx.Abort(c, 401, "authentication required")
 			return
 		}
-		if claims.Role != role {
+		if !roleAllows(claims.Role, role) {
 			httpx.Abort(c, 403, "this area requires the "+role+" role")
 			return
 		}
 		c.Next()
 	}
+}
+
+func roleAllows(actual, required string) bool {
+	if actual == required {
+		return true
+	}
+	return required == "organiser" && actual == "admin"
 }
 
 // GetClaims returns the verified claims, or nil when unauthenticated.

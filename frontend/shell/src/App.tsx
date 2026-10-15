@@ -44,11 +44,15 @@ function studentNav(pathname: string) {
   ];
 }
 
-function organiserNav(pathname: string) {
-  return [
+function organiserNav(pathname: string, isAdmin: boolean) {
+  const items = [
     { label: "My Events", href: "/organiser", active: pathname === "/organiser" || pathname.includes("/registrations") || pathname.includes("/check-in") },
     { label: "New Event", href: "/organiser/events/new", active: pathname.includes("/events/new") || pathname.includes("/edit") },
   ];
+  if (isAdmin) {
+    items.push({ label: "Team", href: "/organiser/team", active: pathname.includes("/team") });
+  }
+  return items;
 }
 
 function ShellFrame({ navRole, children }: { navRole: Role; children: ReactNode }) {
@@ -62,7 +66,7 @@ function ShellFrame({ navRole, children }: { navRole: Role; children: ReactNode 
       <Navbar
         logoSrc="/logo_ufp_site.svg"
         appName="Campus Pulse"
-        items={navRole === "user" ? studentNav(location.pathname) : organiserNav(location.pathname)}
+        items={navRole === "user" ? studentNav(location.pathname) : organiserNav(location.pathname, user?.role === "admin")}
         onNavigate={(href) => navigate(href)}
         userInitials={initials}
         userMenu={
@@ -178,7 +182,7 @@ function DevAccess() {
     try {
       const token = await devLogin(email);
       const user = await completeSignIn(token);
-      navigate(user.role === "organiser" ? "/organiser" : "/events", { replace: true });
+      navigate(user.role === "user" ? "/events" : "/organiser", { replace: true });
     } catch {
       setError("Developer access is unavailable (ALLOW_DEV_LOGIN off or backend down).");
     }
@@ -214,7 +218,7 @@ function AuthCallbackPage() {
       return <Navigate to="/login?error=oidc-failed" replace />;
     }
     completeSignIn(token)
-      .then((user) => navigate(user.role === "organiser" ? "/organiser" : "/events", { replace: true }))
+      .then((user) => navigate(user.role === "user" ? "/events" : "/organiser", { replace: true }))
       .catch(() => setFailed(true));
   }
   if (failed) return <Navigate to="/login?error=oidc-failed" replace />;
