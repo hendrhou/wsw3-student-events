@@ -161,8 +161,8 @@ func (h *Handlers) ingestEvent(c *gin.Context) {
 }
 
 type ingestInterestsBody struct {
-	UserID        string   `json:"userId"`
-	InterestURIs  []string `json:"interestUris"`
+	UserID       string   `json:"userId"`
+	InterestURIs []string `json:"interestUris"`
 }
 
 func (h *Handlers) ingestInterests(c *gin.Context) {

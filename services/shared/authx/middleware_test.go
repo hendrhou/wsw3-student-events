@@ -17,6 +17,7 @@ func requestWithRole(t *testing.T, path, role string) int {
 	}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
+	r.GET("/usr", RequireAuth(issuer), RequireRole("user"), func(c *gin.Context) { c.Status(204) })
 	r.GET("/org", RequireAuth(issuer), RequireRole("organiser"), func(c *gin.Context) { c.Status(204) })
 	r.GET("/adm", RequireAuth(issuer), RequireRole("admin"), func(c *gin.Context) { c.Status(204) })
 	token, err := issuer.Issue("usr_x", "X", "x@ufp.edu.pt", "", role)
@@ -54,5 +55,17 @@ func TestRequireRoleAdminIsStrict(t *testing.T) {
 func TestRequireRoleUserRejected(t *testing.T) {
 	if got := requestWithRole(t, "/org", "user"); got != 403 {
 		t.Fatalf("user on organiser route: got %d, want 403", got)
+	}
+}
+
+func TestRequireRoleCumulative(t *testing.T) {
+	// Every organiser is also a student; admins are both.
+	for _, role := range []string{"user", "organiser", "admin"} {
+		if got := requestWithRole(t, "/usr", role); got != 204 {
+			t.Fatalf("%s on user route: got %d, want 204", role, got)
+		}
+	}
+	if got := requestWithRole(t, "/adm", "user"); got != 403 {
+		t.Fatalf("user on admin route: got %d, want 403", got)
 	}
 }

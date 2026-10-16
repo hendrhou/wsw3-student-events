@@ -70,20 +70,51 @@ function ShellFrame({ navRole, children }: { navRole: Role; children: ReactNode 
         onNavigate={(href) => navigate(href)}
         userInitials={initials}
         userMenu={
-          <UserMenu
-            initials={initials}
-            userName={user?.name ?? ""}
-            showProfile={navRole === "user"}
-            onProfile={() => navigate("/profile")}
-            onSignOut={() => {
-              signOut();
-              navigate("/login");
-            }}
-          />
+          <>
+            <AppSwitcher role={user?.role ?? "user"} current={navRole} onSwitch={(href) => navigate(href)} />
+            <UserMenu
+              initials={initials}
+              userName={user?.name ?? ""}
+              showProfile={navRole === "user"}
+              onProfile={() => navigate("/profile")}
+              onSignOut={() => {
+                signOut();
+                navigate("/login");
+              }}
+            />
+          </>
         }
       />
       <main>{children}</main>
     </>
+  );
+}
+
+/**
+ * App switcher (components.md §3): student ⇄ organiser, visible only to
+ * dual-role users (organiser and admin — every organiser is a student too).
+ */
+function AppSwitcher({ role, current, onSwitch }: { role: Role; current: Role; onSwitch: (href: string) => void }) {
+  if (role === "user") return null;
+  return (
+    <div className="cp-appswitch" role="group" aria-label="Switch area">
+      <button
+        type="button"
+        className={`cp-appswitch__btn${current === "user" ? " cp-appswitch__btn--active" : ""}`}
+        aria-pressed={current === "user"}
+        onClick={() => onSwitch("/events")}
+      >
+        Student
+      </button>
+      <button
+        type="button"
+        className={`cp-appswitch__btn${current !== "user" ? " cp-appswitch__btn--active" : ""}`}
+        aria-pressed={current !== "user"}
+        onClick={() => onSwitch("/organiser")}
+      >
+        Organiser
+      </button>
+    </div>
   );
 }
 

@@ -89,12 +89,14 @@ export async function devLogin(email: string): Promise<string> {
   return body.token;
 }
 
-/** Role gate: no session → login redirect; wrong role → gate page. Admin is a superset of organiser. */
+/** Role gate: no session → login redirect; insufficient role → gate page.
+ * Roles are cumulative: admin ⊃ organiser ⊃ user (an organiser is a student too). */
+const ROLE_RANK: Record<Role, number> = { user: 1, organiser: 2, admin: 3 };
+
 export function RequireRole({ requiredRole, children }: { requiredRole: Role; children: ReactNode }) {
   const user = useAuth((s) => s.user);
   const location = useLocation();
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  const allowed = user.role === requiredRole || (requiredRole === "organiser" && user.role === "admin");
-  if (!allowed) return <Navigate to="/forbidden" replace />;
+  if (ROLE_RANK[user.role] < ROLE_RANK[requiredRole]) return <Navigate to="/forbidden" replace />;
   return <>{children}</>;
 }
