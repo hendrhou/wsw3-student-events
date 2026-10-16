@@ -13,14 +13,23 @@ function RemoteFallback() {
   );
 }
 
+// Stable loader references: Module Federation resolves these once; keeping
+// them module-level lets Remote's effect depend on them safely.
+const loadStudentMfe = () => import("studentMfe/App");
+const loadOrganiserMfe = () => import("organiserMfe/App");
+
 function Remote({ load }: { load: () => Promise<{ default: ComponentType }> }) {
   const [Component, setComponent] = useState<ComponentType | null>(null);
   const [error, setError] = useState(false);
-  if (!Component && !error) {
+  // Loading is a side effect — it must not run during render (React may abort
+  // the render pass, losing the resolution and leaving the remote blank).
+  useEffect(() => {
+    let alive = true;
     load()
-      .then((m) => setComponent(() => m.default))
-      .catch(() => setError(true));
-  }
+      .then((m) => { if (alive) setComponent(() => m.default); })
+      .catch(() => { if (alive) setError(true); });
+    return () => { alive = false; };
+  }, [load]);
   if (error) {
     return (
       <div className="cp-page" role="alert">
@@ -295,7 +304,7 @@ export default function App() {
           element={
             <RequireRole requiredRole="organiser">
               <ShellFrame navRole="organiser">
-                <Remote load={() => import("organiserMfe/App")} />
+                <Remote load={loadOrganiserMfe} />
               </ShellFrame>
             </RequireRole>
           }
@@ -305,7 +314,7 @@ export default function App() {
           element={
             <RequireRole requiredRole="user">
               <ShellFrame navRole="user">
-                <Remote load={() => import("studentMfe/App")} />
+                <Remote load={loadStudentMfe} />
               </ShellFrame>
             </RequireRole>
           }
