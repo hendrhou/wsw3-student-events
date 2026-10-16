@@ -3,6 +3,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -15,14 +16,24 @@ import (
 	"github.com/hendrhou/wsw3-student-events/services/user-service/internal/store"
 )
 
+// UserStore is the persistence surface the handlers need (interface for tests).
+type UserStore interface {
+	UpsertByGoogleSub(ctx context.Context, sub, email, name string) (*store.User, error)
+	GetByEmail(ctx context.Context, email string) (*store.User, error)
+	GetInterests(ctx context.Context, userID string) ([]string, error)
+	SetInterests(ctx context.Context, userID string, uris []string) error
+	ListStaff(ctx context.Context) ([]*store.User, error)
+	SetRoleByEmail(ctx context.Context, email, role string) (*store.User, error)
+}
+
 type Handlers struct {
-	Store          *store.Store
-	Issuer         *authx.Issuer
-	Google         *auth.GoogleFlow
-	FrontendURL    string
-	AllowDevLogin  bool
-	SemanticURL    string // optional; interests are pushed here for the RDF layer
-	Logger         *slog.Logger
+	Store         UserStore
+	Issuer        *authx.Issuer
+	Google        *auth.GoogleFlow
+	FrontendURL   string
+	AllowDevLogin bool
+	SemanticURL   string // optional; interests are pushed here for the RDF layer
+	Logger        *slog.Logger
 }
 
 func RegisterRoutes(r *gin.Engine, h *Handlers) {
@@ -34,6 +45,12 @@ func RegisterRoutes(r *gin.Engine, h *Handlers) {
 	authed.GET("/api/auth/me", h.me)
 	authed.GET("/api/profile/interests", h.getInterests)
 	authed.POST("/api/profile/interests", h.setInterests)
+
+	// Team management: admins grant/revoke the organiser role in-app.
+	admin := r.Group("/", authx.RequireAuth(h.Issuer), authx.RequireRole("admin"))
+	admin.GET("/api/admin/organisers", h.listOrganisers)
+	admin.POST("/api/admin/organisers", h.grantOrganiser)
+	admin.DELETE("/api/admin/organisers/:email", h.revokeOrganiser)
 }
 
 func (h *Handlers) googleLogin(c *gin.Context) {
@@ -164,12 +181,91 @@ func (h *Handlers) setInterests(c *gin.Context) {
 	c.JSON(200, gin.H{"saved": len(uris)})
 }
 
+// ---------- team management (admin) ----------
+
+type staffDTO struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	Role  string `json:"role"`
+}
+
+func toStaffDTO(u *store.User) staffDTO {
+	return staffDTO{Email: u.Email, Name: u.Name, Role: u.Role}
+}
+
+func (h *Handlers) listOrganisers(c *gin.Context) {
+	staff, err := h.Store.ListStaff(c.Request.Context())
+	if err != nil {
+		httpx.Internal(c)
+		return
+	}
+	out := make([]staffDTO, 0, len(staff))
+	for _, u := range staff {
+		out = append(out, toStaffDTO(u))
+	}
+	c.JSON(200, out)
+}
+
+type grantBody struct {
+	Email string `json:"email"`
+}
+
+// grantOrganiser makes a @ufp.edu.pt account an organiser. The role lands in
+// the DB immediately and reaches the person in the JWT at their next sign-in.
+func (h *Handlers) grantOrganiser(c *gin.Context) {
+	var body grantBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		httpx.BadRequest(c, "a valid email is required")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(body.Email))
+	if !strings.HasSuffix(email, "@ufp.edu.pt") {
+		httpx.BadRequest(c, "only @ufp.edu.pt accounts can be organisers")
+		return
+	}
+	user, err := h.Store.SetRoleByEmail(c.Request.Context(), email, "organiser")
+	if err != nil {
+		httpx.Internal(c)
+		return
+	}
+	h.Logger.Info("organiser granted", "by", authx.GetClaims(c).Email, "to", email)
+	c.JSON(200, gin.H{"user": toStaffDTO(user), "message": "Organiser access granted — applies at their next sign-in"})
+}
+
+func (h *Handlers) revokeOrganiser(c *gin.Context) {
+	email := strings.ToLower(c.Param("email"))
+	caller := authx.GetClaims(c)
+	if email == caller.Email {
+		httpx.BadRequest(c, "you cannot revoke your own access")
+		return
+	}
+	target, err := h.Store.GetByEmail(c.Request.Context(), email)
+	if err != nil {
+		httpx.NotFound(c, "Account")
+		return
+	}
+	if target.Role == "admin" {
+		httpx.BadRequest(c, "admins are managed via ADMIN_EMAILS, not the Team screen")
+		return
+	}
+	if target.Role != "organiser" {
+		httpx.NotFound(c, "Organiser")
+		return
+	}
+	if _, err := h.Store.SetRoleByEmail(c.Request.Context(), email, "user"); err != nil {
+		httpx.Internal(c)
+		return
+	}
+	h.Logger.Info("organiser revoked", "by", caller.Email, "to", email)
+	c.Status(http.StatusNoContent)
+}
+
 // pushInterests feeds the semantic layer (push-on-write; failure only logs).
 func (h *Handlers) pushInterests(userID string, uris []string) {
 	if h.SemanticURL == "" {
 		return
 	}
-	payload := strings.NewReader(`{"userId":"`+userID+`","interestUris":[`+quoteJoin(uris)+`]}`)
+	payload := strings.NewReader(`{"userId":"` + userID + `","interestUris":[` + quoteJoin(uris) + `]}`)
 	resp, err := http.Post(strings.TrimRight(h.SemanticURL, "/")+"/internal/ingest/interests", "application/json", payload)
 	if err != nil {
 		h.Logger.Warn("semantic ingestion failed", "error", err)

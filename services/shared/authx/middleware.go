@@ -28,7 +28,9 @@ func RequireAuth(issuer *Issuer) gin.HandlerFunc {
 	}
 }
 
-// RequireRole rejects authenticated users without the role (403).
+// RequireRole rejects authenticated users below the required role (403).
+// Roles are cumulative: admin ⊃ organiser ⊃ user — an organiser is also a
+// student, an admin is both. RequireRole("user") just means "signed in".
 func RequireRole(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims := GetClaims(c)
@@ -36,11 +38,24 @@ func RequireRole(role string) gin.HandlerFunc {
 			httpx.Abort(c, 401, "authentication required")
 			return
 		}
-		if claims.Role != role {
+		if roleRank(claims.Role) < roleRank(role) {
 			httpx.Abort(c, 403, "this area requires the "+role+" role")
 			return
 		}
 		c.Next()
+	}
+}
+
+func roleRank(role string) int {
+	switch role {
+	case "user":
+		return 1
+	case "organiser":
+		return 2
+	case "admin":
+		return 3
+	default:
+		return 0
 	}
 }
 

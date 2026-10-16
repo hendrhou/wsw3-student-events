@@ -38,6 +38,9 @@ services:
       - name: profile
         paths: ["/api/profile"]
         strip_path: false
+      - name: admin
+        paths: ["/api/admin"]
+        strip_path: false
 
   - name: event-service
     url: http://event-service:8080

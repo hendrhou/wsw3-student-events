@@ -13,14 +13,23 @@ function RemoteFallback() {
   );
 }
 
+// Stable loader references: Module Federation resolves these once; keeping
+// them module-level lets Remote's effect depend on them safely.
+const loadStudentMfe = () => import("studentMfe/App");
+const loadOrganiserMfe = () => import("organiserMfe/App");
+
 function Remote({ load }: { load: () => Promise<{ default: ComponentType }> }) {
   const [Component, setComponent] = useState<ComponentType | null>(null);
   const [error, setError] = useState(false);
-  if (!Component && !error) {
+  // Loading is a side effect — it must not run during render (React may abort
+  // the render pass, losing the resolution and leaving the remote blank).
+  useEffect(() => {
+    let alive = true;
     load()
-      .then((m) => setComponent(() => m.default))
-      .catch(() => setError(true));
-  }
+      .then((m) => { if (alive) setComponent(() => m.default); })
+      .catch(() => { if (alive) setError(true); });
+    return () => { alive = false; };
+  }, [load]);
   if (error) {
     return (
       <div className="cp-page" role="alert">
@@ -44,11 +53,15 @@ function studentNav(pathname: string) {
   ];
 }
 
-function organiserNav(pathname: string) {
-  return [
+function organiserNav(pathname: string, isAdmin: boolean) {
+  const items = [
     { label: "My Events", href: "/organiser", active: pathname === "/organiser" || pathname.includes("/registrations") || pathname.includes("/check-in") },
     { label: "New Event", href: "/organiser/events/new", active: pathname.includes("/events/new") || pathname.includes("/edit") },
   ];
+  if (isAdmin) {
+    items.push({ label: "Team", href: "/organiser/team", active: pathname.includes("/team") });
+  }
+  return items;
 }
 
 function ShellFrame({ navRole, children }: { navRole: Role; children: ReactNode }) {
@@ -62,24 +75,55 @@ function ShellFrame({ navRole, children }: { navRole: Role; children: ReactNode 
       <Navbar
         logoSrc="/logo_ufp_site.svg"
         appName="Campus Pulse"
-        items={navRole === "user" ? studentNav(location.pathname) : organiserNav(location.pathname)}
+        items={navRole === "user" ? studentNav(location.pathname) : organiserNav(location.pathname, user?.role === "admin")}
         onNavigate={(href) => navigate(href)}
         userInitials={initials}
         userMenu={
-          <UserMenu
-            initials={initials}
-            userName={user?.name ?? ""}
-            showProfile={navRole === "user"}
-            onProfile={() => navigate("/profile")}
-            onSignOut={() => {
-              signOut();
-              navigate("/login");
-            }}
-          />
+          <>
+            <AppSwitcher role={user?.role ?? "user"} current={navRole} onSwitch={(href) => navigate(href)} />
+            <UserMenu
+              initials={initials}
+              userName={user?.name ?? ""}
+              showProfile={navRole === "user"}
+              onProfile={() => navigate("/profile")}
+              onSignOut={() => {
+                signOut();
+                navigate("/login");
+              }}
+            />
+          </>
         }
       />
       <main>{children}</main>
     </>
+  );
+}
+
+/**
+ * App switcher (components.md §3): student ⇄ organiser, visible only to
+ * dual-role users (organiser and admin — every organiser is a student too).
+ */
+function AppSwitcher({ role, current, onSwitch }: { role: Role; current: Role; onSwitch: (href: string) => void }) {
+  if (role === "user") return null;
+  return (
+    <div className="cp-appswitch" role="group" aria-label="Switch area">
+      <button
+        type="button"
+        className={`cp-appswitch__btn${current === "user" ? " cp-appswitch__btn--active" : ""}`}
+        aria-pressed={current === "user"}
+        onClick={() => onSwitch("/events")}
+      >
+        Student
+      </button>
+      <button
+        type="button"
+        className={`cp-appswitch__btn${current !== "user" ? " cp-appswitch__btn--active" : ""}`}
+        aria-pressed={current !== "user"}
+        onClick={() => onSwitch("/organiser")}
+      >
+        Organiser
+      </button>
+    </div>
   );
 }
 
@@ -178,7 +222,7 @@ function DevAccess() {
     try {
       const token = await devLogin(email);
       const user = await completeSignIn(token);
-      navigate(user.role === "organiser" ? "/organiser" : "/events", { replace: true });
+      navigate(user.role === "user" ? "/events" : "/organiser", { replace: true });
     } catch {
       setError("Developer access is unavailable (ALLOW_DEV_LOGIN off or backend down).");
     }
@@ -214,7 +258,7 @@ function AuthCallbackPage() {
       return <Navigate to="/login?error=oidc-failed" replace />;
     }
     completeSignIn(token)
-      .then((user) => navigate(user.role === "organiser" ? "/organiser" : "/events", { replace: true }))
+      .then((user) => navigate(user.role === "user" ? "/events" : "/organiser", { replace: true }))
       .catch(() => setFailed(true));
   }
   if (failed) return <Navigate to="/login?error=oidc-failed" replace />;
@@ -260,7 +304,7 @@ export default function App() {
           element={
             <RequireRole requiredRole="organiser">
               <ShellFrame navRole="organiser">
-                <Remote load={() => import("organiserMfe/App")} />
+                <Remote load={loadOrganiserMfe} />
               </ShellFrame>
             </RequireRole>
           }
@@ -270,7 +314,7 @@ export default function App() {
           element={
             <RequireRole requiredRole="user">
               <ShellFrame navRole="user">
-                <Remote load={() => import("studentMfe/App")} />
+                <Remote load={loadStudentMfe} />
               </ShellFrame>
             </RequireRole>
           }

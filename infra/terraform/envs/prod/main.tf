@@ -130,9 +130,14 @@ module "go_service" {
   region                 = var.region
   discovery_namespace_id = aws_service_discovery_private_dns_namespace.internal.id
   allowed_ingress_sg_ids = [module.kong.security_group_id]
-  environment = {
-    PORT = "8080"
-  }
+  environment = merge(
+    { PORT = "8080" },
+    # Per-service extras. user-service owns identity: ADMIN_EMAILS provisions
+    # the in-app admins (they sign in with Google like everyone else).
+    each.value == "user-service" && length(var.admin_emails) > 0 ? {
+      ADMIN_EMAILS = join(",", var.admin_emails)
+    } : {},
+  )
   secrets = {
     JWT_SECRET = aws_secretsmanager_secret.jwt.arn
   }

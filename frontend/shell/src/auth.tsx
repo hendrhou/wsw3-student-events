@@ -3,7 +3,7 @@ import { setAuthToken, getConfig, apiFetch } from "@campus-pulse/api";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
-export type Role = "user" | "organiser";
+export type Role = "user" | "organiser" | "admin";
 
 export interface SessionUser {
   name: string;
@@ -32,7 +32,7 @@ function readStoredUser(): SessionUser | null {
       "name" in parsed &&
       "studentNumber" in parsed &&
       "role" in parsed &&
-      ((parsed as SessionUser).role === "user" || (parsed as SessionUser).role === "organiser")
+      ((parsed as SessionUser).role === "user" || (parsed as SessionUser).role === "organiser" || (parsed as SessionUser).role === "admin")
     ) {
       return parsed as SessionUser;
     }
@@ -89,11 +89,14 @@ export async function devLogin(email: string): Promise<string> {
   return body.token;
 }
 
-/** Role gate: 401 → login redirect; 403 → role gate page (cross-screen requirement). */
+/** Role gate: no session → login redirect; insufficient role → gate page.
+ * Roles are cumulative: admin ⊃ organiser ⊃ user (an organiser is a student too). */
+const ROLE_RANK: Record<Role, number> = { user: 1, organiser: 2, admin: 3 };
+
 export function RequireRole({ requiredRole, children }: { requiredRole: Role; children: ReactNode }) {
   const user = useAuth((s) => s.user);
   const location = useLocation();
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  if (user.role !== requiredRole) return <Navigate to="/forbidden" replace />;
+  if (ROLE_RANK[user.role] < ROLE_RANK[requiredRole]) return <Navigate to="/forbidden" replace />;
   return <>{children}</>;
 }
