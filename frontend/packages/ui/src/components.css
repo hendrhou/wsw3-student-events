@@ -1,0 +1,8 @@
+/* Campus Pulse UI — component styles. Import once, after tokens.css. */
+@import "./styles/buttons.css";
+@import "./styles/badges.css";
+@import "./styles/forms.css";
+@import "./styles/cards.css";
+@import "./styles/navbar.css";
+@import "./styles/table.css";
+@import "./styles/overlay.css";

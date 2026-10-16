@@ -1,0 +1,101 @@
+/* Form inputs — components.md §4 */
+.cp-field { display: flex; flex-direction: column; gap: var(--cp-space-1); }
+.cp-field__label { font: var(--cp-text-small); color: var(--cp-text-primary); }
+.cp-field__required { color: var(--cp-error); }
+.cp-field__control {
+  display: flex;
+  align-items: center;
+  gap: var(--cp-space-2);
+  min-height: 44px;
+  padding: 0 var(--cp-space-3);
+  background: var(--cp-brand-white);
+  border: 1px solid var(--cp-neutral-400);
+  border-radius: var(--cp-radius-sm);
+  font: var(--cp-text-body);
+  color: var(--cp-text-primary);
+}
+.cp-field__control:focus-within {
+  border-color: var(--cp-brand-primary);
+  border-width: 2px;
+  padding: 0 calc(var(--cp-space-3) - 1px);
+}
+.cp-field__control input,
+.cp-field__control select,
+.cp-field__control textarea {
+  border: none;
+  outline: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  padding: var(--cp-space-2) 0;
+}
+.cp-field__control textarea { min-height: 96px; resize: vertical; }
+.cp-field__control input::placeholder,
+.cp-field__control textarea::placeholder { color: var(--cp-neutral-400); }
+.cp-field--disabled .cp-field__control { opacity: 0.45; }
+.cp-field--readonly .cp-field__control { background: var(--cp-neutral-100); }
+.cp-field--error .cp-field__control { border-color: var(--cp-error); }
+.cp-field__helper { font: var(--cp-text-small); color: var(--cp-text-secondary); }
+.cp-field__error {
+  display: flex;
+  align-items: center;
+  gap: var(--cp-space-1);
+  font: var(--cp-text-small);
+  color: var(--cp-error);
+}
+
+/* Checkbox — 20px box, brand-primary when checked */
+.cp-checkbox { display: inline-flex; align-items: center; gap: var(--cp-space-2); cursor: pointer; font: var(--cp-text-body); }
+.cp-checkbox input {
+  appearance: none;
+  width: 20px; height: 20px;
+  border: 1px solid var(--cp-neutral-400);
+  border-radius: var(--cp-radius-sm);
+  background: var(--cp-brand-white);
+  cursor: pointer;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+}
+.cp-checkbox input:checked {
+  background: var(--cp-brand-primary);
+  border-color: var(--cp-brand-primary);
+}
+.cp-checkbox input:checked::after {
+  content: "";
+  width: 10px; height: 6px;
+  border-left: 2px solid var(--cp-brand-white);
+  border-bottom: 2px solid var(--cp-brand-white);
+  transform: rotate(-45deg) translateY(-1px);
+}
+.cp-checkbox input:focus-visible { outline: 2px solid var(--cp-focus-ring); outline-offset: 2px; }
+
+/* Combobox — ARIA combobox pattern with async option loading */
+.cp-combobox { position: relative; }
+.cp-combobox__listbox {
+  position: absolute;
+  top: calc(100% + var(--cp-space-1));
+  left: 0; right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--cp-space-1);
+  list-style: none;
+  background: var(--cp-surface-card);
+  border: var(--cp-border-default);
+  border-radius: var(--cp-radius-md);
+  box-shadow: var(--cp-shadow-2);
+  z-index: var(--cp-z-overlay);
+}
+.cp-combobox__option {
+  padding: var(--cp-space-2) var(--cp-space-3);
+  border-radius: var(--cp-radius-sm);
+  font: var(--cp-text-body);
+  cursor: pointer;
+}
+.cp-combobox__option[aria-selected="true"],
+.cp-combobox__option--active {
+  background: var(--cp-brand-primary-subtle);
+}
+.cp-combobox__option-uri { display: block; font: var(--cp-text-caption); color: var(--cp-text-secondary); }
