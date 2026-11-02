@@ -61,7 +61,9 @@ services:
   # created when the services are implemented.
   user-service:
     profiles: ["backend"]
-    build: ./services/user-service
+    build:
+      context: ./services
+      dockerfile: user-service/Dockerfile
     environment:
       DATABASE_URL: postgres://campus_pulse:campus_pulse@user-db:5432/users
       PORT: "8080"
@@ -71,7 +73,9 @@ services:
 
   event-service:
     profiles: ["backend"]
-    build: ./services/event-service
+    build:
+      context: ./services
+      dockerfile: event-service/Dockerfile
     environment:
       DATABASE_URL: postgres://campus_pulse:campus_pulse@event-db:5432/events
       PORT: "8080"
@@ -81,7 +85,9 @@ services:
 
   registration-service:
     profiles: ["backend"]
-    build: ./services/registration-service
+    build:
+      context: ./services
+      dockerfile: registration-service/Dockerfile
     environment:
       DATABASE_URL: postgres://campus_pulse:campus_pulse@registration-db:5432/registrations
       PORT: "8080"
@@ -91,7 +97,9 @@ services:
 
   semantic-service:
     profiles: ["backend"]
-    build: ./services/semantic-service
+    build:
+      context: ./services
+      dockerfile: semantic-service/Dockerfile
     environment:
       SPARQL_ENDPOINT: http://fuseki:3030/campus-pulse/sparql
       PORT: "8080"
@@ -100,7 +108,9 @@ services:
 
   ticket-service:
     profiles: ["backend"]
-    build: ./services/ticket-service
+    build:
+      context: ./services
+      dockerfile: ticket-service/Dockerfile
     environment:
       DATABASE_URL: postgres://campus_pulse:campus_pulse@ticket-db:5432/tickets
       PORT: "8080"

@@ -34,16 +34,20 @@ services:
     routes:
       - name: auth
         paths: ["/api/auth"]
+        strip_path: false
       - name: profile
         paths: ["/api/profile"]
+        strip_path: false
 
   - name: event-service
     url: http://event-service:8080
     routes:
       - name: events
         paths: ["/api/events"]
+        strip_path: false
       - name: organiser-events
         paths: ["/api/organiser/events"]
+        strip_path: false
         methods: [GET, POST, PATCH]
 
   - name: registration-service
@@ -52,22 +56,28 @@ services:
       # Regex routes take precedence over the organiser-events prefix route.
       - name: registrations
         paths: ["~/api/organiser/events/[^/]+/registrations$"]
+        strip_path: false
       - name: check-in
         paths: ["~/api/organiser/events/[^/]+/check-in$"]
+        strip_path: false
         methods: [POST]
       - name: export
         paths: ["~/api/organiser/events/[^/]+/export.csv$"]
+        strip_path: false
 
   - name: semantic-service
     url: http://semantic-service:8080
     routes:
       - name: recommendations
         paths: ["/api/recommendations"]
+        strip_path: false
       - name: ontology
         paths: ["/api/ontology"]
+        strip_path: false
 
   - name: ticket-service
     url: http://ticket-service:8080
     routes:
       - name: tickets
         paths: ["/api/tickets"]
+        strip_path: false
