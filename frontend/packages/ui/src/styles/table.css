@@ -1,0 +1,67 @@
+/* Table — components.md §7 */
+.cp-table-wrap {
+  background: var(--cp-surface-card);
+  border: var(--cp-border-default);
+  border-radius: var(--cp-radius-md);
+  overflow: hidden;
+}
+.cp-table { width: 100%; border-collapse: collapse; }
+.cp-table thead th {
+  background: var(--cp-neutral-100);
+  font: var(--cp-text-small);
+  font-weight: 600;
+  color: var(--cp-text-secondary);
+  text-align: left;
+  padding: var(--cp-space-3) var(--cp-space-4);
+}
+.cp-table tbody td {
+  padding: var(--cp-space-3) var(--cp-space-4);
+  border-bottom: var(--cp-border-default);
+  font: var(--cp-text-small);
+  color: var(--cp-text-primary);
+  height: 48px;
+}
+.cp-table tbody tr:last-child td { border-bottom: none; }
+.cp-table tbody tr { cursor: default; }
+.cp-table tbody tr.cp-table__row--clickable { cursor: pointer; }
+.cp-table tbody tr.cp-table__row--clickable:hover { background: var(--cp-neutral-50); }
+.cp-table__th-sortable { cursor: pointer; user-select: none; }
+.cp-table__th-sortable button {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cp-space-1);
+  cursor: pointer;
+}
+.cp-table__th-sortable button:focus-visible { outline: 2px solid var(--cp-focus-ring); outline-offset: 2px; }
+.cp-table__cell--numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.cp-table__footer {
+  padding: var(--cp-space-3) var(--cp-space-4);
+  font: var(--cp-text-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--cp-text-secondary);
+  border-top: var(--cp-border-default);
+}
+
+/* ≤767px: collapse to stacked cards, never horizontal-scroll */
+@media (max-width: 767px) {
+  .cp-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .cp-table tbody tr {
+    display: block;
+    border-bottom: var(--cp-border-default);
+    padding: var(--cp-space-3);
+  }
+  .cp-table tbody td {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: var(--cp-space-2);
+    border: none;
+    height: auto;
+    padding: var(--cp-space-1) 0;
+  }
+  .cp-table tbody td::before {
+    content: attr(data-label);
+    font: var(--cp-text-caption);
+    color: var(--cp-text-secondary);
+  }
+}

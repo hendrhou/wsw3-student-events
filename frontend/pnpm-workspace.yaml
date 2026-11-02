@@ -1,0 +1,5 @@
+packages:
+  - "shell"
+  - "student-mfe"
+  - "organiser-mfe"
+  - "packages/*"

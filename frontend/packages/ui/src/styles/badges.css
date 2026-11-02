@@ -1,0 +1,50 @@
+/* Badge / Tag / status — components.md §5. Status is never color alone: dot + label. */
+.cp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cp-space-1);
+  height: 22px;
+  padding: 0 var(--cp-space-2);
+  border-radius: var(--cp-radius-full);
+  font: var(--cp-text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cp-badge__dot { width: 6px; height: 6px; border-radius: var(--cp-radius-full); flex: none; }
+
+.cp-badge--success { background: var(--cp-success-subtle); color: var(--cp-success); }
+.cp-badge--success .cp-badge__dot { background: var(--cp-success); }
+.cp-badge--warning { background: var(--cp-warning-subtle); color: var(--cp-warning); }
+.cp-badge--warning .cp-badge__dot { background: var(--cp-warning); }
+.cp-badge--error { background: var(--cp-error-subtle); color: var(--cp-error); }
+.cp-badge--error .cp-badge__dot { background: var(--cp-error); }
+.cp-badge--info { background: var(--cp-info-subtle); color: var(--cp-info); }
+.cp-badge--info .cp-badge__dot { background: var(--cp-info); }
+.cp-badge--neutral { background: var(--cp-neutral-100); color: var(--cp-neutral-600); border-radius: var(--cp-radius-sm); }
+.cp-badge--neutral .cp-badge__dot { background: var(--cp-neutral-600); }
+/* accent is reserved for recommendations / pending attention — gold meaning is consistent */
+.cp-badge--accent { background: var(--cp-brand-accent); color: var(--cp-brand-accent-on); }
+.cp-badge--accent .cp-badge__dot { background: var(--cp-brand-accent-on); }
+
+/* ProgressBar — components.md §8 */
+.cp-progress { display: inline-flex; align-items: center; gap: var(--cp-space-2); }
+.cp-progress__track {
+  width: 120px; height: 6px;
+  background: var(--cp-neutral-200);
+  border-radius: var(--cp-radius-full);
+  overflow: hidden;
+}
+.cp-progress__fill { height: 100%; background: var(--cp-brand-primary); border-radius: var(--cp-radius-full); }
+.cp-progress__fill--warning { background: var(--cp-warning); }
+.cp-progress__label { font: var(--cp-text-mono-data); font-variant-numeric: tabular-nums; color: var(--cp-text-secondary); }
+
+/* Skeleton — components.md §8 */
+.cp-skeleton {
+  background: var(--cp-neutral-100);
+  border-radius: var(--cp-radius-sm);
+  animation: cp-skeleton-pulse 1.5s ease-in-out infinite;
+}
+@keyframes cp-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

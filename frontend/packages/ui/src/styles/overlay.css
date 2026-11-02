@@ -1,0 +1,106 @@
+/* Modal / Dialog — components.md §6 */
+.cp-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgb(32 34 34 / 0.48);
+  backdrop-filter: blur(2px);
+  z-index: var(--cp-z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--cp-space-4);
+}
+.cp-modal {
+  background: var(--cp-surface-card);
+  border-radius: var(--cp-radius-lg);
+  box-shadow: var(--cp-shadow-3);
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - var(--cp-space-16));
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cp-space-4);
+  padding: var(--cp-space-6);
+  animation: cp-modal-in var(--cp-motion-base);
+}
+.cp-modal--sm { max-width: 400px; }
+.cp-modal--lg { max-width: 720px; }
+@keyframes cp-modal-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.cp-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cp-space-3);
+}
+.cp-modal__title { font: var(--cp-text-h2); color: var(--cp-text-primary); margin: 0; }
+.cp-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px; height: 44px;
+  border: none; background: none; cursor: pointer;
+  color: var(--cp-text-secondary);
+  border-radius: var(--cp-radius-md);
+}
+.cp-modal__close:hover { background: var(--cp-neutral-100); }
+.cp-modal__close:focus-visible { outline: 2px solid var(--cp-focus-ring); outline-offset: 2px; }
+.cp-modal__footer { display: flex; justify-content: flex-end; gap: var(--cp-space-2); }
+.cp-modal__footer--danger-first { flex-direction: row-reverse; }
+
+/* Scan-result variant (organiser check-in): full-screen single-status panel */
+.cp-scan-result {
+  position: fixed;
+  inset: 0;
+  z-index: var(--cp-z-modal);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--cp-space-3);
+  color: var(--cp-text-on-primary);
+  text-align: center;
+  padding: var(--cp-space-6);
+  animation: cp-modal-in var(--cp-motion-base);
+}
+.cp-scan-result--success { background: var(--cp-success); }
+.cp-scan-result--warning { background: var(--cp-warning); }
+.cp-scan-result--error { background: var(--cp-error); }
+.cp-scan-result--info { background: var(--cp-info); }
+.cp-scan-result__name { font: var(--cp-text-h1); margin: 0; }
+.cp-scan-result__detail { font: var(--cp-text-body); opacity: 0.95; }
+
+/* Toast — components.md §8 */
+.cp-toast-region {
+  position: fixed;
+  top: var(--cp-space-4);
+  right: var(--cp-space-4);
+  z-index: var(--cp-z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cp-space-2);
+  max-width: 360px;
+}
+.cp-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--cp-space-2);
+  padding: var(--cp-space-3);
+  background: var(--cp-surface-card);
+  border-radius: var(--cp-radius-md);
+  box-shadow: var(--cp-shadow-2);
+  font: var(--cp-text-small);
+  color: var(--cp-text-primary);
+  animation: cp-toast-in var(--cp-motion-base);
+}
+@keyframes cp-toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cp-toast__action {
+  border: none; background: none; cursor: pointer;
+  color: var(--cp-brand-primary);
+  font: var(--cp-text-small);
+  font-weight: 600;
+}
