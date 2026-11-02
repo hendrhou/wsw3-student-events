@@ -4,4 +4,5 @@ use (
 	./shared
 	./event-service
 	./user-service
+	./registration-service
 )

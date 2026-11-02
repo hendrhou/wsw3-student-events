@@ -53,7 +53,11 @@ services:
   - name: registration-service
     url: http://registration-service:8080
     routes:
-      # Regex routes take precedence over the organiser-events prefix route.
+      # Regex routes take precedence over prefix routes (Kong traditional router).
+      - name: register
+        paths: ["~/api/events/[^/]+/register$"]
+        methods: [POST]
+        strip_path: false
       - name: registrations
         paths: ["~/api/organiser/events/[^/]+/registrations$"]
         strip_path: false
