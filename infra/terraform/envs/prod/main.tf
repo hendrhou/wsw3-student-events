@@ -102,7 +102,7 @@ module "fuseki" {
   source                 = "../../modules/ecs-service"
   project                = var.project
   name                   = "fuseki"
-  image                  = "stain/jena-fuseki:5.2.0"
+  image                  = "stain/jena-fuseki:5.1.0"
   port                   = 3030
   cluster_id             = aws_ecs_cluster.this.id
   vpc_id                 = module.vpc.vpc_id
