@@ -1,6 +1,6 @@
 module github.com/hendrhou/wsw3-student-events/services/event-service
 
-go 1.23
+go 1.26
 
 require (
 	github.com/gin-gonic/gin v1.10.0

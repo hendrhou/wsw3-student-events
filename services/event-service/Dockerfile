@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # event-service image. Build context: services/ (the Go workspace root).
-FROM golang:1.23-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY shared ./shared
 COPY event-service ./event-service

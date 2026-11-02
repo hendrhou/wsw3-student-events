@@ -1,7 +1,7 @@
 import { Suspense, useState, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Button, Navbar, Skeleton, ToastRegion, type ToastData } from "@campus-pulse/ui";
-import { RequireRole, useAuth, type Role } from "./auth";
+import { RequireRole, useAuth, googleLoginUrl, devLogin, type Role } from "./auth";
 
 function RemoteFallback() {
   return (
@@ -62,7 +62,7 @@ function ShellFrame({ navRole, children }: { navRole: Role; children: ReactNode 
       <Navbar
         logoSrc="/logo_ufp_site.svg"
         appName="Campus Pulse"
-        items={navRole === "student" ? studentNav(location.pathname) : organiserNav(location.pathname)}
+        items={navRole === "user" ? studentNav(location.pathname) : organiserNav(location.pathname)}
         onNavigate={(href) => navigate(href)}
         userInitials={initials}
         userMenu={
@@ -86,27 +86,81 @@ function ShellFrame({ navRole, children }: { navRole: Role; children: ReactNode 
 }
 
 function LoginPage() {
-  const signIn = useAuth((s) => s.signIn);
-  const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? "/events";
-
-  function enter(role: Role) {
-    signIn({ name: role === "student" ? "Vítor Carvalho" : "Olga Ribeiro", studentNumber: "20220123", role });
-    navigate(role === "organiser" ? "/organiser" : from, { replace: true });
-  }
-
+  const error = new URLSearchParams(location.search).get("error");
   return (
     <div className="cp-login">
       <img src="/logo_ufp_site.svg" alt="Universidade Fernando Pessoa" height={64} style={{ alignSelf: "center" }} />
       <h1 className="cp-page__title" style={{ textAlign: "center" }}>Campus Pulse</h1>
       <p className="cp-muted" style={{ textAlign: "center" }}>
-        Dev sign-in (interim until user-service lands). Choose a role:
+        Sign in with your UFP Google account.
       </p>
-      <Button size="lg" onClick={() => enter("student")}>Enter as student</Button>
-      <Button size="lg" variant="secondary" onClick={() => enter("organiser")}>Enter as organiser</Button>
+      {error === "only-ufp" ? (
+        <p className="cp-error-panel" role="alert">Only @ufp.edu.pt accounts can sign in.</p>
+      ) : null}
+      {error === "oidc-failed" ? (
+        <p className="cp-error-panel" role="alert">Sign-in failed — please try again.</p>
+      ) : null}
+      <Button size="lg" onClick={() => { window.location.href = googleLoginUrl(); }}>
+        Sign in with UFP Google
+      </Button>
+      <DevAccess />
     </div>
   );
+}
+
+/** Local-development access: visible always, but the endpoint only exists when the backend runs with ALLOW_DEV_LOGIN=true. */
+function DevAccess() {
+  const completeSignIn = useAuth((s) => s.completeSignIn);
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+
+  async function enter(email: string) {
+    setError(null);
+    try {
+      const token = await devLogin(email);
+      const user = await completeSignIn(token);
+      navigate(user.role === "organiser" ? "/organiser" : "/events", { replace: true });
+    } catch {
+      setError("Developer access is unavailable (ALLOW_DEV_LOGIN off or backend down).");
+    }
+  }
+
+  return (
+    <details style={{ marginTop: "var(--cp-space-4)" }}>
+      <summary className="cp-muted" style={{ cursor: "pointer", textAlign: "center" }}>
+        Developer access (local only)
+      </summary>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--cp-space-2)", marginTop: "var(--cp-space-3)" }}>
+        {error ? <p className="cp-error-panel" role="alert">{error}</p> : null}
+        <Button variant="secondary" onClick={() => enter("vitor@ufp.edu.pt")}>Enter as Vítor (student)</Button>
+        <Button variant="ghost" onClick={() => enter("olga@ufp.edu.pt")}>Enter as Olga (organiser)</Button>
+      </div>
+    </details>
+  );
+}
+
+/** OIDC landing: stores the session token, confirms the profile, routes by role. */
+function AuthCallbackPage() {
+  const completeSignIn = useAuth((s) => s.completeSignIn);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [failed, setFailed] = useState(false);
+  const [done, setDone] = useState(false);
+
+  if (!done && !failed) {
+    setDone(true);
+    const token = new URLSearchParams(location.search).get("token");
+    if (!token) {
+      setFailed(true);
+      return <Navigate to="/login?error=oidc-failed" replace />;
+    }
+    completeSignIn(token)
+      .then((user) => navigate(user.role === "organiser" ? "/organiser" : "/events", { replace: true }))
+      .catch(() => setFailed(true));
+  }
+  if (failed) return <Navigate to="/login?error=oidc-failed" replace />;
+  return <div className="cp-page" aria-busy="true"><Skeleton height={40} /><Skeleton height={200} /></div>;
 }
 
 function ForbiddenPage() {
@@ -115,7 +169,7 @@ function ForbiddenPage() {
     <div className="cp-page" role="alert">
       <h1 className="cp-page__title">Restricted area</h1>
       <p className="cp-muted">
-        {user?.role === "student"
+        {user?.role === "user"
           ? "This area is for event organisers. Switch accounts if you have an organiser role."
           : "This area is for students."}
       </p>
@@ -140,6 +194,7 @@ export default function App() {
       <ToastRegion toasts={toasts} onDismiss={dismiss} />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/forbidden" element={<ForbiddenPage />} />
         <Route path="/" element={<Navigate to="/events" replace />} />
         <Route
@@ -155,8 +210,8 @@ export default function App() {
         <Route
           path="/*"
           element={
-            <RequireRole requiredRole="student">
-              <ShellFrame navRole="student">
+            <RequireRole requiredRole="user">
+              <ShellFrame navRole="user">
                 <Remote load={() => import("studentMfe/App")} />
               </ShellFrame>
             </RequireRole>
