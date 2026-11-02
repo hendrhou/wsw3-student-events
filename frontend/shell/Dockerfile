@@ -11,9 +11,13 @@ COPY shell ./shell
 ARG VITE_STUDENT_MFE_URL=http://localhost:5001
 ARG VITE_ORGANISER_MFE_URL=http://localhost:5002
 ARG VITE_GATEWAY_URL=/api
+# MSW mocks are for local pnpm dev/tests; container builds default to the real
+# backend through Kong. Override with --build-arg VITE_USE_MSW=true.
+ARG VITE_USE_MSW=false
 ENV VITE_STUDENT_MFE_URL=$VITE_STUDENT_MFE_URL \
     VITE_ORGANISER_MFE_URL=$VITE_ORGANISER_MFE_URL \
-    VITE_GATEWAY_URL=$VITE_GATEWAY_URL
+    VITE_GATEWAY_URL=$VITE_GATEWAY_URL \
+    VITE_USE_MSW=$VITE_USE_MSW
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @campus-pulse/shell build
 

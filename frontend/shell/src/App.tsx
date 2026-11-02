@@ -1,4 +1,4 @@
-import { Suspense, useState, type ComponentType, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Button, Navbar, Skeleton, ToastRegion, type ToastData } from "@campus-pulse/ui";
 import { RequireRole, useAuth, googleLoginUrl, devLogin, type Role } from "./auth";
@@ -66,22 +66,80 @@ function ShellFrame({ navRole, children }: { navRole: Role; children: ReactNode 
         onNavigate={(href) => navigate(href)}
         userInitials={initials}
         userMenu={
-          <button
-            type="button"
-            className="cp-avatar cp-avatar--32"
-            aria-label="Log out"
-            title={`${user?.name ?? ""} — log out`}
-            onClick={() => {
+          <UserMenu
+            initials={initials}
+            userName={user?.name ?? ""}
+            showProfile={navRole === "user"}
+            onProfile={() => navigate("/profile")}
+            onSignOut={() => {
               signOut();
               navigate("/login");
             }}
-          >
-            {initials}
-          </button>
+          />
         }
       />
       <main>{children}</main>
     </>
+  );
+}
+
+/**
+ * Avatar menu per design/components.md: Profile · Log out (separated, danger).
+ * The avatar itself only opens the menu — it must never sign out directly.
+ */
+function UserMenu({ initials, userName, showProfile, onProfile, onSignOut }: {
+  initials: string;
+  userName: string;
+  showProfile: boolean;
+  onProfile: () => void;
+  onSignOut: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="cp-usermenu" ref={rootRef}>
+      <button
+        type="button"
+        className="cp-avatar cp-avatar--32"
+        aria-label={`${userName} — account menu`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={userName}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {initials}
+      </button>
+      {open ? (
+        <div className="cp-usermenu__pop" role="menu" aria-label="Account">
+          {showProfile ? (
+            <button type="button" role="menuitem" className="cp-usermenu__item" onClick={() => { setOpen(false); onProfile(); }}>
+              Profile
+            </button>
+          ) : null}
+          {showProfile ? <div className="cp-usermenu__sep" role="separator" /> : null}
+          <button type="button" role="menuitem" className="cp-usermenu__item cp-usermenu__item--danger" onClick={() => { setOpen(false); onSignOut(); }}>
+            Log out
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

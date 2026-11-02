@@ -27,32 +27,37 @@ frontend/               React micro frontends (this is the runnable app today)
                         mocks (MSW fixtures for dev & tests)
 ```
 
-Planned backend (per the agreed architecture in the protocol §2.1): Kong API
+The backend described in the protocol §2.1 is implemented: Kong API
 gateway + five Go/Gin services (`user`, `event`, `registration`, `semantic`,
-`ticket`), each with its own persistence, all orchestrated from a single
-root `docker-compose.yml`. Until those land, the frontend runs against
-built-in MSW mocks that implement the full API contract.
+`ticket`), each with its own Postgres database, plus a Jena Fuseki triple
+store for the semantic layer — all orchestrated from a single root
+`docker-compose.yml`.
 
 ## Quick start
 
-### Option A — Docker (containers only)
+### Option A — Full stack in Docker (frontend + backend)
 
 ```sh
-docker compose up --build
+docker compose --profile backend up --build
 # → http://localhost:3000  (shell composing both MFEs)
 # → http://localhost:8000  (Kong gateway, /api/*)
 ```
 
-The root [docker-compose.yml](docker-compose.yml) is the single orchestration
-file for the whole system (R3): frontend + Kong start by default; the five
-Go/Gin services, their databases and the RDF store are profile-gated until they
-land — `docker compose --profile backend up --build` once they exist.
+14 containers come up: shell + 2 MFEs, Kong, the five Go services, four
+Postgres databases and Fuseki. The frontend containers talk to the real
+backend through Kong (MSW off). Sign in with **Developer access** on the
+login page (Vítor = student, Olga = organiser) — Google OIDC is wired and
+activates as soon as `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are provided
+in `.env`.
 
-MFE remotes are served on :5001/:5002 and fetched by the shell cross-origin.
-Until the Go services exist, the gateway has no live upstreams — use Option B
-for a working demo today.
+### Option B — Frontend only in Docker
 
-### Option B — Local dev with mocked API (recommended for now)
+```sh
+VITE_USE_MSW=true docker compose up --build
+# → http://localhost:3000  (shell + MFEs against MSW mocks)
+```
+
+### Option C — Local dev with mocked API
 
 ```sh
 cd frontend
@@ -66,9 +71,6 @@ pnpm dev
 Standalone MFE dev servers start with MSW mocks, so every screen — including
 registration, credential issuance, and check-in — is demoable with no backend.
 Set `VITE_USE_MSW=false` to hit a real gateway instead.
-
-Sign-in is a dev role picker (student / organiser) until `user-service` issues
-real JWTs.
 
 ## Verify
 
@@ -109,7 +111,9 @@ Coverage gates are enforced per package (≥80% lines/statements).
 | Protocol, architecture diagrams, design package | ✅ merged |
 | Figma screens (S1–S5, O1–O4 + mobile) | ✅ done |
 | Frontend: ui/api/mocks/shell/student/organiser + Docker | ✅ PRs #2–#6 (merge in order) |
-| Go/Gin services + Kong gateway | ⬜ next |
-| OWL ontology (Protégé) + RDF transformation | ⬜ next |
-| Web 3.0 credential issuance/verification service | ⬜ next |
+| CI, unified compose + Kong, Terraform skeleton | ✅ PRs #7–#10 |
+| Go/Gin services: shared → user → event → registration → ticket → semantic | ✅ PRs #11–#16 (stacked, merge in order) |
+| OWL ontology + RDF transformation (Fuseki, SPARQL recommendations) | ✅ PR #16 |
+| Web 3.0 VC issuance/verification (VC-JWT, did:key) | ✅ PR #15 |
+| AWS deployment (Terraform apply + release pipeline) | ⬜ manual, after merge |
 
