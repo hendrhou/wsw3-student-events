@@ -16,7 +16,8 @@ export const handlers = [
     const url = new URL(request.url);
     const q = (url.searchParams.get("q") ?? "").toLowerCase();
     const category = url.searchParams.get("category") ?? "";
-    let result = events;
+    // The discovery feed only lists upcoming events
+    let result = events.filter((e) => !e.past);
     if (q) result = result.filter((e) => e.title.toLowerCase().includes(q));
     if (category) result = result.filter((e) => e.category === category);
     return HttpResponse.json(result.map(({ ...e }) => e));

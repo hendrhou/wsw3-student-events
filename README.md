@@ -38,14 +38,19 @@ built-in MSW mocks that implement the full API contract.
 ### Option A — Docker (containers only)
 
 ```sh
-cd frontend
 docker compose up --build
-# → http://localhost:5000  (shell composing both MFEs)
+# → http://localhost:3000  (shell composing both MFEs)
+# → http://localhost:8000  (Kong gateway, /api/*)
 ```
 
+The root [docker-compose.yml](docker-compose.yml) is the single orchestration
+file for the whole system (R3): frontend + Kong start by default; the five
+Go/Gin services, their databases and the RDF store are profile-gated until they
+land — `docker compose --profile backend up --build` once they exist.
+
 MFE remotes are served on :5001/:5002 and fetched by the shell cross-origin.
-The gateway URL defaults to http://localhost:8000/api (Kong — not built yet;
-use Option B for a working demo today).
+Until the Go services exist, the gateway has no live upstreams — use Option B
+for a working demo today.
 
 ### Option B — Local dev with mocked API (recommended for now)
 
