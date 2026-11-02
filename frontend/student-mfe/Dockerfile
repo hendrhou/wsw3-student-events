@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1
+# Campus Pulse student-mfe (Module Federation remote). Build context: frontend/
+FROM node:22-alpine AS build
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages ./packages
+COPY student-mfe ./student-mfe
+ARG VITE_GATEWAY_URL=/api
+ENV VITE_GATEWAY_URL=$VITE_GATEWAY_URL
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @campus-pulse/student-mfe build
+
+FROM nginx:1.27-alpine
+COPY --from=build /app/student-mfe/dist /usr/share/nginx/html
+# CORS-enabled config: the shell origin fetches remoteEntry.js cross-origin
+COPY docker/nginx-mfe.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
