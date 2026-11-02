@@ -1,6 +1,10 @@
 
-# Local agent harness (per-developer, not committed)
-.github/
+# Local agent harness (per-developer, not committed) — but CI/CD workflows ARE
+# project infrastructure and must be versioned:
+# (gitignore can't re-include under a directory-level ignore, so we ignore the
+# contents and carve out workflows/)
+.github/*
+!.github/workflows/
 .vscode/
 .venv/
 

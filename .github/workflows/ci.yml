@@ -1,0 +1,96 @@
+name: CI
+
+# Quality gates on every pull request. Release pipeline (release.yml) owns main.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    # Detect which areas changed so heavy jobs only run when relevant.
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      go: ${{ steps.filter.outputs.go }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1 -q || true
+          BASE=$(git merge-base HEAD "origin/${{ github.base_ref }}" 2>/dev/null || echo HEAD~1)
+          CHANGED=$(git diff --name-only "$BASE"...HEAD)
+          echo "frontend=$([ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "go=$([ -n "$(echo "$CHANGED" | grep -E '^services/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "infra=$([ -n "$(echo "$CHANGED" | grep -E '^infra/terraform/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@9.15.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Lint (incl. jsx-a11y)
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm -r run typecheck
+      - name: Tests with coverage gates
+        run: pnpm -r run test
+      - name: Production builds (Module Federation entries)
+        run: pnpm -r --filter "@campus-pulse/shell" --filter "@campus-pulse/student-mfe" --filter "@campus-pulse/organiser-mfe" run build
+
+  go:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go.work
+      - name: Vet
+        run: cd services && go vet ./...
+      - name: Tests
+        run: cd services && go test ./...
+      # Integration tests that need Postgres skip gracefully without Docker.
+
+  docker-smoke:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build compose images
+        run: docker compose build
+      - name: Compose config validates
+        run: docker compose config -q && docker compose --profile backend config -q
+
+  terraform-validate:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Format check
+        run: terraform fmt -check -recursive ../..
+      - name: Init (no backend) + validate
+        run: terraform init -backend=false && terraform validate
