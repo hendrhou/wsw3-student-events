@@ -112,6 +112,51 @@ func (s *Store) GetByID(ctx context.Context, id string) (*User, error) {
 	return scanUser(row)
 }
 
+// ListStaff returns everyone with elevated access (organiser or admin),
+// admins first, for the Team management screen.
+func (s *Store) ListStaff(ctx context.Context) ([]*User, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, COALESCE(google_sub,''), email, name, student_number, role FROM users WHERE role IN ('organiser','admin') ORDER BY role DESC, email`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.GoogleSub, &u.Email, &u.Name, &u.StudentNumber, &u.Role); err != nil {
+			return nil, err
+		}
+		out = append(out, &u)
+	}
+	return out, rows.Err()
+}
+
+// SetRoleByEmail grants or revokes a role, creating a placeholder account when
+// the person has never signed in (their profile completes on first Google
+// sign-in via UpsertByGoogleSub). Returns the resulting user.
+func (s *Store) SetRoleByEmail(ctx context.Context, email, role string) (*User, error) {
+	name := email
+	if i := indexByte(email, '@'); i > 0 {
+		name = email[:i]
+	}
+	row := s.pool.QueryRow(ctx, `
+		INSERT INTO users (id, email, name, role)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role
+		RETURNING id, COALESCE(google_sub,''), email, name, student_number, role`,
+		newID("usr"), email, name, role)
+	return scanUser(row)
+}
+
+func indexByte(s string, b byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
+
 type rowScanner interface {
 	Scan(dest ...any) error
 }

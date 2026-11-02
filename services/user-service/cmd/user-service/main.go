@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,20 @@ func main() {
 	if err := st.Migrate(ctx); err != nil {
 		logger.Error("migrations failed", "error", err)
 		os.Exit(1)
+	}
+
+	// Bootstrap admins from env: the only way to become admin (the Team screen
+	// manages organisers, never admins). Idempotent on every boot.
+	for _, email := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {
+		email = strings.ToLower(strings.TrimSpace(email))
+		if email == "" {
+			continue
+		}
+		if _, err := st.SetRoleByEmail(ctx, email, "admin"); err != nil {
+			logger.Error("admin bootstrap failed", "email", email, "error", err)
+			os.Exit(1)
+		}
+		logger.Info("admin provisioned", "email", email)
 	}
 
 	issuer, err := authx.NewIssuer(os.Getenv("JWT_SECRET"), 24*time.Hour)

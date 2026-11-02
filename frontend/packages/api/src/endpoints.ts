@@ -9,6 +9,7 @@ import {
   OrganiserEventSchema,
   RecommendationSchema,
   RegistrationRowSchema,
+  StaffMemberSchema,
   TicketSchema,
   type CheckInResult,
   type EventDetail,
@@ -18,6 +19,7 @@ import {
   type OrganiserEvent,
   type Recommendation,
   type RegistrationRow,
+  type StaffMember,
   type Ticket,
 } from "./schema";
 import { z } from "zod";
@@ -117,4 +119,21 @@ export async function exportRegistrationsCsv(eventId: string, query: string): Pr
   const response = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!response.ok) throw new Error(`Export failed (${response.status})`);
   return response.blob();
+}
+
+// ---------- admin (team management) ----------
+
+export async function listStaff(): Promise<StaffMember[]> {
+  const data = await apiFetch<unknown>("/admin/organisers");
+  return z.array(StaffMemberSchema).parse(data);
+}
+
+/** Grants organiser access; the role reaches the person at their next sign-in. */
+export async function grantOrganiser(email: string): Promise<{ user: StaffMember; message: string }> {
+  const data = await apiFetch<unknown>("/admin/organisers", { method: "POST", body: { email } });
+  return z.object({ user: StaffMemberSchema, message: z.string() }).parse(data);
+}
+
+export async function revokeOrganiser(email: string): Promise<void> {
+  await apiFetch<unknown>(`/admin/organisers/${encodeURIComponent(email)}`, { method: "DELETE" });
 }

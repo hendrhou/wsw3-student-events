@@ -102,3 +102,11 @@ export const EventPayloadSchema = z.object({
   topics: z.array(z.string()).min(1),
 });
 export type EventPayload = z.infer<typeof EventPayloadSchema>;
+
+/** Staff member returned by the admin team-management endpoints. */
+export const StaffMemberSchema = z.object({
+  email: z.string().email(),
+  name: z.string(),
+  role: z.enum(["organiser", "admin"]),
+});
+export type StaffMember = z.infer<typeof StaffMemberSchema>;

@@ -76,6 +76,9 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URL: http://localhost:${KONG_PORT:-8000}/api/auth/google/callback
       ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-true}
+      # Comma-separated emails promoted to admin at startup (demo default: Olga).
+      # Admins manage organisers from the Team screen; admins are env-managed.
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-olga@ufp.edu.pt}
       SEMANTIC_SERVICE_URL: http://semantic-service:8080
     depends_on:
       user-db:

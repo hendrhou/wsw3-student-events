@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { events, interests, myInterests, organiserEvents, recommendations, registrations, tickets } from "./fixtures";
+import { events, interests, myInterests, organiserEvents, recommendations, registrations, staff, tickets } from "./fixtures";
 
 /**
  * MSW handlers for the whole Kong gateway surface used by the MFEs.
@@ -87,5 +87,24 @@ export const handlers = [
   http.get(stripApi("/api/organiser/events/:id/export.csv"), () => {
     const csv = "name,student_number,registered_at,status\nAna Silva,20220123,2026-10-01 14:22,Checked-in\n";
     return new HttpResponse(csv, { headers: { "Content-Type": "text/csv" } });
+  }),
+
+  http.get(stripApi("/api/admin/organisers"), () => HttpResponse.json(staff)),
+
+  http.post(stripApi("/api/admin/organisers"), async ({ request }) => {
+    const body = (await request.json()) as { email?: string };
+    const email = (body.email ?? "").trim().toLowerCase();
+    if (!email.endsWith("@ufp.edu.pt")) {
+      return HttpResponse.json({ message: "only @ufp.edu.pt accounts can be organisers" }, { status: 400 });
+    }
+    const member = { email, name: email.split("@")[0], role: "organiser" as const };
+    return HttpResponse.json({ user: member, message: "Organiser access granted — applies at their next sign-in" });
+  }),
+
+  http.delete(stripApi("/api/admin/organisers/:email"), ({ params }) => {
+    if (!String(params.email).endsWith("@ufp.edu.pt")) {
+      return HttpResponse.json({ message: "Account not found" }, { status: 404 });
+    }
+    return new HttpResponse(null, { status: 204 });
   }),
 ];

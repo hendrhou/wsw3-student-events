@@ -16,7 +16,7 @@ type Claims struct {
 	Name          string `json:"name"`
 	Email         string `json:"email"`
 	StudentNumber string `json:"student_number"`
-	Role          string `json:"role"` // "user" | "organiser"
+	Role          string `json:"role"` // "user" | "organiser" | "admin"
 	jwt.RegisteredClaims
 }
 

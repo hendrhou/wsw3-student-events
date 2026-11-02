@@ -85,7 +85,7 @@ func testHandlers(st Store) *Handlers {
 	sessionKeys, _ := authx.NewIssuer(testSecret, time.Hour)
 	return &Handlers{
 		Store: st, Issuer: issuer, SessionKeys: sessionKeys,
-		Logger: slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
+		Logger:        slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
 		PublicBaseURL: "http://localhost:8000",
 	}
 }

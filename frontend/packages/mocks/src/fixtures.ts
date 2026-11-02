@@ -1,4 +1,4 @@
-import type { EventDetail, Interest, OrganiserEvent, Recommendation, RegistrationRow, Ticket } from "@campus-pulse/api";
+import type { EventDetail, Interest, OrganiserEvent, Recommendation, RegistrationRow, StaffMember, Ticket } from "@campus-pulse/api";
 
 /**
  * Mock fixtures matching the API contract. Realistic Campus Pulse content so
@@ -233,4 +233,9 @@ export const registrations: RegistrationRow[] = [
   { id: "reg-2", name: "Bruno Martins", studentNumber: "20210456", registeredAt: "2026-10-01 15:03", status: "Confirmed" },
   { id: "reg-3", name: "Carla Rodrigues", studentNumber: "20230789", registeredAt: "2026-10-02 09:41", status: "Confirmed" },
   { id: "reg-4", name: "Diogo Ferreira", studentNumber: "20211234", registeredAt: "2026-10-02 11:15", status: "Waitlisted" },
+];
+
+export const staff: StaffMember[] = [
+  { email: "olga@ufp.edu.pt", name: "Olga Ribeiro", role: "admin" },
+  { email: "rui@ufp.edu.pt", name: "Rui Costa", role: "organiser" },
 ];

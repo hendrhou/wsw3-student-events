@@ -6,4 +6,5 @@ use (
 	./user-service
 	./registration-service
 	./ticket-service
+	./semantic-service
 )
