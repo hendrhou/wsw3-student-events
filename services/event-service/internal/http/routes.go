@@ -139,7 +139,7 @@ func (h *Handlers) listEvents(c *gin.Context) {
 		Venue:    c.Query("venue"),
 	})
 	if err != nil {
-		h.Logger.Error("list events failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "list events failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
@@ -157,7 +157,7 @@ func (h *Handlers) getEvent(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		h.Logger.Error("get event failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "get event failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
@@ -168,7 +168,7 @@ func (h *Handlers) listMine(c *gin.Context) {
 	claims := authx.GetClaims(c)
 	events, err := h.Store.ListMine(c.Request.Context(), claims.UserID)
 	if err != nil {
-		h.Logger.Error("list mine failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "list mine failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
@@ -264,12 +264,12 @@ func (h *Handlers) createEvent(c *gin.Context) {
 	}
 	id, err := h.Store.Create(c.Request.Context(), event)
 	if err != nil {
-		h.Logger.Error("create event failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "create event failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
 	event.ID = id
-	go h.pushToSemantic(event)
+	go h.pushToSemantic(context.WithoutCancel(c.Request.Context()), event)
 	c.JSON(201, gin.H{"id": id})
 }
 
@@ -294,12 +294,12 @@ func (h *Handlers) updateEvent(c *gin.Context) {
 			httpx.NotFound(c, "Event")
 			return
 		}
-		h.Logger.Error("update event failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "update event failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
 	event.ID = c.Param("id")
-	go h.pushToSemantic(event)
+	go h.pushToSemantic(context.WithoutCancel(c.Request.Context()), event)
 	c.JSON(200, gin.H{"id": event.ID})
 }
 
@@ -326,10 +326,12 @@ func (h *Handlers) adjustCounters(c *gin.Context) {
 }
 
 // pushToSemantic feeds the semantic layer (push-on-write; failure only logs).
-func (h *Handlers) pushToSemantic(event *store.Event) {
+func (h *Handlers) pushToSemantic(parent context.Context, event *store.Event) {
 	if h.SemanticURL == "" {
 		return
 	}
+	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
+	defer cancel()
 	payload, err := json.Marshal(gin.H{
 		"id": event.ID, "title": event.Title, "category": event.Category,
 		"date": event.Date.Format("2006-01-02"), "venue": event.Venue, "topics": event.Topics,
@@ -337,9 +339,15 @@ func (h *Handlers) pushToSemantic(event *store.Event) {
 	if err != nil {
 		return
 	}
-	resp, err := http.Post(strings.TrimRight(h.SemanticURL, "/")+"/internal/ingest/event", "application/json", strings.NewReader(string(payload)))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(h.SemanticURL, "/")+"/internal/ingest/event", strings.NewReader(string(payload)))
 	if err != nil {
-		h.Logger.Warn("semantic ingestion failed", "error", err, "event", event.ID)
+		h.Logger.WarnContext(ctx, "semantic request invalid", "error", err)
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(request)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "semantic ingestion failed", "error", err)
 		return
 	}
 	_ = resp.Body.Close()

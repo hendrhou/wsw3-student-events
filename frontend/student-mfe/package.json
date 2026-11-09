@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@campus-pulse/telemetry": "workspace:*",
     "@campus-pulse/api": "workspace:*",
     "@campus-pulse/ui": "workspace:*",
     "@tanstack/react-query": "^5.62.0",

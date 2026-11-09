@@ -1,5 +1,21 @@
 name: campus-pulse
 
+x-telemetry: &telemetry
+  APP_ENV: ${APP_ENV:-local}
+  APP_VERSION: ${APP_VERSION:-dev}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+x-logging: &logging
+  driver: syslog
+  options:
+    syslog-address: udp://127.0.0.1:${SYSLOG_PORT:-1514}
+    syslog-format: rfc5424
+    tag: '{{.ID}}'
+    mode: non-blocking
+    max-buffer-size: 4m
+
 # Single orchestration file for the whole distributed system (R3).
 # One documented start-up command: `docker compose up --build`.
 #
@@ -11,6 +27,7 @@ name: campus-pulse
 services:
   # ---------- Frontend (React MFEs, Module Federation) ----------
   shell:
+    logging: *logging
     build:
       context: ./frontend
       dockerfile: shell/Dockerfile
@@ -18,6 +35,8 @@ services:
         VITE_STUDENT_MFE_URL: http://localhost:${STUDENT_MFE_PORT:-5001}
         VITE_ORGANISER_MFE_URL: http://localhost:${ORGANISER_MFE_PORT:-5002}
         VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
         # Containers default to the real backend through Kong; set
         # VITE_USE_MSW=true in .env to run the frontend against MSW mocks.
         VITE_USE_MSW: ${VITE_USE_MSW:-false}
@@ -28,31 +47,45 @@ services:
       - organiser-mfe
 
   student-mfe:
+    logging: *logging
     build:
       context: ./frontend
       dockerfile: student-mfe/Dockerfile
       args:
         VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
     ports:
       - "${STUDENT_MFE_PORT:-5001}:80"
 
   organiser-mfe:
+    logging: *logging
     build:
       context: ./frontend
       dockerfile: organiser-mfe/Dockerfile
       args:
         VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
     ports:
       - "${ORGANISER_MFE_PORT:-5002}:80"
 
   # ---------- API gateway (Kong, DB-less declarative mode) ----------
   kong:
+    logging: *logging
     image: kong:3.9
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /kong/kong.yml
       KONG_PROXY_LISTEN: 0.0.0.0:8000
       KONG_LOG_LEVEL: info
+      KONG_STATUS_LISTEN: 0.0.0.0:8100
+      KONG_DNS_VALID_TTL: "5"
+      KONG_DNS_STALE_TTL: "1"
+      KONG_TRACING_INSTRUMENTATIONS: all
+      KONG_TRACING_SAMPLING_RATE: ${OTEL_TRACES_SAMPLER_ARG:-1}
+      KONG_PROXY_ACCESS_LOG: "off"
+      KONG_ADMIN_ACCESS_LOG: "off"
     volumes:
       - ./gateway/kong.yml:/kong/kong.yml:ro
     ports:
@@ -63,11 +96,13 @@ services:
   # Each Go/Gin service has its own persistence (R1). Build contexts are
   # created when the services are implemented.
   user-service:
+    logging: *logging
     profiles: ["backend"]
     build:
       context: ./services
       dockerfile: user-service/Dockerfile
     environment:
+      <<: *telemetry
       DATABASE_URL: postgres://campus_pulse:campus_pulse@user-db:5432/users
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
@@ -85,11 +120,13 @@ services:
         condition: service_healthy
 
   event-service:
+    logging: *logging
     profiles: ["backend"]
     build:
       context: ./services
       dockerfile: event-service/Dockerfile
     environment:
+      <<: *telemetry
       DATABASE_URL: postgres://campus_pulse:campus_pulse@event-db:5432/events
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
@@ -99,11 +136,13 @@ services:
         condition: service_healthy
 
   registration-service:
+    logging: *logging
     profiles: ["backend"]
     build:
       context: ./services
       dockerfile: registration-service/Dockerfile
     environment:
+      <<: *telemetry
       DATABASE_URL: postgres://campus_pulse:campus_pulse@registration-db:5432/registrations
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
@@ -114,11 +153,13 @@ services:
         condition: service_healthy
 
   semantic-service:
+    logging: *logging
     profiles: ["backend"]
     build:
       context: ./services
       dockerfile: semantic-service/Dockerfile
     environment:
+      <<: *telemetry
       SPARQL_ENDPOINT: http://fuseki:3030/campus-pulse/sparql
       SPARQL_UPDATE_ENDPOINT: http://fuseki:3030/campus-pulse/update
       FUSEKI_USER: admin
@@ -130,11 +171,13 @@ services:
       - fuseki
 
   ticket-service:
+    logging: *logging
     profiles: ["backend"]
     build:
       context: ./services
       dockerfile: ticket-service/Dockerfile
     environment:
+      <<: *telemetry
       DATABASE_URL: postgres://campus_pulse:campus_pulse@ticket-db:5432/tickets
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
@@ -187,3 +230,71 @@ services:
       ADMIN_PASSWORD: campus_pulse
     ports:
       - "${FUSEKI_PORT:-3030}:3030"
+
+  alloy:
+    image: grafana/alloy:v1.11.0
+    command: [run, --server.http.listen-addr=0.0.0.0:12345, --storage.path=/var/lib/alloy, /etc/alloy/config.alloy]
+    volumes:
+      - ./observability/alloy.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy
+    ports:
+      - "127.0.0.1:${SYSLOG_PORT:-1514}:1514/udp"
+    mem_limit: 512m
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=7d, --storage.tsdb.retention.size=1GB, --web.enable-remote-write-receiver]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    mem_limit: 512m
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.5.5
+    command: [-config.file=/etc/loki/config.yml]
+    volumes:
+      - ./observability/loki.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    mem_limit: 512m
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: [-config.file=/etc/tempo/config.yml]
+    volumes:
+      - ./observability/tempo.yml:/etc/tempo/config.yml:ro
+      - tempo-data:/var/tempo
+    mem_limit: 512m
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in your local .env}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_METRICS_ENABLED: "true"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    mem_limit: 256m
+    restart: unless-stopped
+
+volumes:
+  alloy-data:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

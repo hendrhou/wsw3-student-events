@@ -27,6 +27,9 @@ frontend/               React micro frontends (this is the runnable app today)
                         mocks (MSW fixtures for dev & tests)
 ```
 
+                        Observability configuration, generated dashboards, alert rules, and verification
+                        tools live in [observability/](observability/README.md).
+
 The backend described in the protocol §2.1 is implemented: Kong API
 gateway + five Go/Gin services (`user`, `event`, `registration`, `semantic`,
 `ticket`), each with its own Postgres database, plus a Jena Fuseki triple
@@ -37,14 +40,21 @@ store for the semantic layer — all orchestrated from a single root
 
 ### Option A — Full stack in Docker (frontend + backend)
 
+Set `GRAFANA_ADMIN_PASSWORD` in your local `.env` first, using a private generated
+value (for example, generate one with `openssl rand -hex 24`). The example
+environment file intentionally leaves it empty.
+
 ```sh
 docker compose --profile backend up --build
 # → http://localhost:3000  (shell composing both MFEs)
 # → http://localhost:8000  (Kong gateway, /api/*)
+# → http://localhost:3001  (Grafana, login required)
+# → http://localhost:9090  (Prometheus, localhost only)
 ```
 
-14 containers come up: shell + 2 MFEs, Kong, the five Go services, four
-Postgres databases and Fuseki. The frontend containers talk to the real
+19 containers come up: shell + 2 MFEs, Kong, the five Go services, four
+Postgres databases, Fuseki, and Prometheus/Grafana/Loki/Tempo/Alloy.
+The frontend containers talk to the real
 backend through Kong (MSW off). Sign in with **Developer access** on the
 login page (Vítor = student, Olga = organiser) — Google OIDC is wired and
 activates as soon as `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are provided

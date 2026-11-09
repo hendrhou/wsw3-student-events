@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hendrhou/wsw3-student-events/services/shared/authx"
@@ -73,13 +74,13 @@ func (h *Handlers) googleCallback(c *gin.Context) {
 			h.redirectWithError(c, "only-ufp")
 			return
 		}
-		h.Logger.Warn("oidc callback failed", "error", err)
+		h.Logger.WarnContext(c.Request.Context(), "oidc callback failed", "error", err)
 		h.redirectWithError(c, "oidc-failed")
 		return
 	}
 	user, err := h.Store.UpsertByGoogleSub(c.Request.Context(), identity.Subject, identity.Email, identity.Name)
 	if err != nil {
-		h.Logger.Error("user upsert failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "user upsert failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
@@ -177,7 +178,7 @@ func (h *Handlers) setInterests(c *gin.Context) {
 		httpx.Internal(c)
 		return
 	}
-	go h.pushInterests(userID, uris)
+	go h.pushInterests(context.WithoutCancel(c.Request.Context()), userID, uris)
 	c.JSON(200, gin.H{"saved": len(uris)})
 }
 
@@ -228,7 +229,7 @@ func (h *Handlers) grantOrganiser(c *gin.Context) {
 		httpx.Internal(c)
 		return
 	}
-	h.Logger.Info("organiser granted", "by", authx.GetClaims(c).Email, "to", email)
+	h.Logger.InfoContext(c.Request.Context(), "organiser granted")
 	c.JSON(200, gin.H{"user": toStaffDTO(user), "message": "Organiser access granted — applies at their next sign-in"})
 }
 
@@ -256,19 +257,27 @@ func (h *Handlers) revokeOrganiser(c *gin.Context) {
 		httpx.Internal(c)
 		return
 	}
-	h.Logger.Info("organiser revoked", "by", caller.Email, "to", email)
+	h.Logger.InfoContext(c.Request.Context(), "organiser revoked")
 	c.Status(http.StatusNoContent)
 }
 
 // pushInterests feeds the semantic layer (push-on-write; failure only logs).
-func (h *Handlers) pushInterests(userID string, uris []string) {
+func (h *Handlers) pushInterests(parent context.Context, userID string, uris []string) {
 	if h.SemanticURL == "" {
 		return
 	}
+	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
+	defer cancel()
 	payload := strings.NewReader(`{"userId":"` + userID + `","interestUris":[` + quoteJoin(uris) + `]}`)
-	resp, err := http.Post(strings.TrimRight(h.SemanticURL, "/")+"/internal/ingest/interests", "application/json", payload)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(h.SemanticURL, "/")+"/internal/ingest/interests", payload)
 	if err != nil {
-		h.Logger.Warn("semantic ingestion failed", "error", err)
+		h.Logger.WarnContext(ctx, "semantic request invalid", "error", err)
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(request)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "semantic ingestion failed", "error", err)
 		return
 	}
 	_ = resp.Body.Close()

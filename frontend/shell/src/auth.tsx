@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { setAuthToken, getConfig, apiFetch } from "@campus-pulse/api";
+import { instrumentedFetch } from "@campus-pulse/telemetry";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
@@ -78,7 +79,7 @@ export function googleLoginUrl(): string {
 /** Dev-only login (local): the endpoint exists only when ALLOW_DEV_LOGIN=true. */
 export async function devLogin(email: string): Promise<string> {
   const { gatewayUrl } = getConfig();
-  const response = await fetch(`${gatewayUrl}/auth/dev-login`, {
+  const response = await instrumentedFetch(new URL(`${gatewayUrl}/auth/dev-login`, window.location.origin), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),

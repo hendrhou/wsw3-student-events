@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@campus-pulse/telemetry": "workspace:*",
     "zod": "^3.24.1"
   },
   "devDependencies": {
