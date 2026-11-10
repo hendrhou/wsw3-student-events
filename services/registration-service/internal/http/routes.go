@@ -200,12 +200,12 @@ func (h *Handlers) exportCSV(c *gin.Context) {
 	}
 	q := strings.ToLower(c.Query("q"))
 	var b strings.Builder
-	b.WriteString("name,student_number,registered_at,status\n")
+	b.WriteString("booking_ref,name,student_number,registered_at,status\n")
 	for i := range regs {
 		if q != "" && !strings.Contains(strings.ToLower(regs[i].UserName), q) && !strings.Contains(regs[i].StudentNumber, q) {
 			continue
 		}
-		fmt.Fprintf(&b, "%s,%s,%s,%s\n", regs[i].UserName, regs[i].StudentNumber,
+		fmt.Fprintf(&b, "%s,%s,%s,%s,%s\n", regs[i].BookingRef, regs[i].UserName, regs[i].StudentNumber,
 			regs[i].RegisteredAt.Format("2006-01-02 15:04"), regs[i].Status)
 	}
 	c.Header("Content-Disposition", `attachment; filename="registrations.csv"`)

@@ -4,8 +4,10 @@ import { federation } from "@module-federation/vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const studentUrl = env.VITE_STUDENT_MFE_URL ?? "http://localhost:5001";
-  const organiserUrl = env.VITE_ORGANISER_MFE_URL ?? "http://localhost:5002";
+  const eventsUrl = env.VITE_EVENTS_MFE_URL ?? "http://localhost:5001";
+  const participationUrl = env.VITE_PARTICIPATION_MFE_URL ?? "http://localhost:5002";
+  const credentialsUrl = env.VITE_CREDENTIALS_MFE_URL ?? "http://localhost:5003";
+  const peopleUrl = env.VITE_PEOPLE_MFE_URL ?? "http://localhost:5004";
 
   return {
     plugins: [
@@ -13,10 +15,13 @@ export default defineConfig(({ mode }) => {
       federation({
         name: "shell",
         remotes: {
-          studentMfe: { type: "module", name: "studentMfe", entry: `${studentUrl}/remoteEntry.js` },
-          organiserMfe: { type: "module", name: "organiserMfe", entry: `${organiserUrl}/remoteEntry.js` },
+          eventsMfe: { type: "module", name: "eventsMfe", entry: `${eventsUrl}/remoteEntry.js` },
+          participationMfe: { type: "module", name: "participationMfe", entry: `${participationUrl}/remoteEntry.js` },
+          credentialsMfe: { type: "module", name: "credentialsMfe", entry: `${credentialsUrl}/remoteEntry.js` },
+          peopleMfe: { type: "module", name: "peopleMfe", entry: `${peopleUrl}/remoteEntry.js` },
         },
         shared: {
+          "@campus-pulse/contracts": { singleton: true },
           react: { singleton: true },
           "react-dom": { singleton: true },
           "react-router-dom": { singleton: true },

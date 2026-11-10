@@ -90,13 +90,23 @@ func newID(prefix string) string {
 }
 
 // UpsertByGoogleSub creates or returns the user for a Google subject.
-// First sign-in assigns the default role "user".
+// First sign-in links an email-provisioned account or creates a default "user".
 func (s *Store) UpsertByGoogleSub(ctx context.Context, sub, email, name string) (*User, error) {
 	row := s.pool.QueryRow(ctx, `
-		INSERT INTO users (id, google_sub, email, name)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (google_sub) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email
-		RETURNING id, COALESCE(google_sub,''), email, name, student_number, role`,
+		WITH existing AS (
+			UPDATE users SET email=$3, name=$4 WHERE google_sub=$2
+			RETURNING id, google_sub, email, name, student_number, role
+		), linked AS (
+			INSERT INTO users (id, google_sub, email, name)
+			SELECT $1, $2, $3, $4 WHERE NOT EXISTS (SELECT 1 FROM existing)
+			ON CONFLICT (email) DO UPDATE
+				SET google_sub=EXCLUDED.google_sub, name=EXCLUDED.name
+				WHERE users.google_sub IS NULL OR users.google_sub=EXCLUDED.google_sub
+			RETURNING id, google_sub, email, name, student_number, role
+		)
+		SELECT * FROM existing
+		UNION ALL
+		SELECT * FROM linked`,
 		newID("usr"), sub, email, name)
 	return scanUser(row)
 }

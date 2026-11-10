@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@campus-pulse/contracts": "workspace:*",
     "@campus-pulse/telemetry": "workspace:*",
     "@campus-pulse/api": "workspace:*",
     "@campus-pulse/ui": "workspace:*",

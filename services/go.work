@@ -1,10 +1,10 @@
 go 1.26.0
 
 use (
-	./shared
 	./event-service
-	./user-service
 	./registration-service
-	./ticket-service
 	./semantic-service
+	./shared
+	./ticket-service
+	./user-service
 )

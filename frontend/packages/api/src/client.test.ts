@@ -14,7 +14,7 @@ vi.stubGlobal("window", {
   },
 });
 
-const { apiFetch, ApiError, setAuthToken, getAuthToken } = await import("./client");
+const { apiFetch, apiAssetUrl, ApiError, setAuthToken, getAuthToken } = await import("./client");
 const { resetConfigForTests } = await import("./config");
 
 describe("apiFetch", () => {
@@ -32,6 +32,10 @@ describe("apiFetch", () => {
     expect(url.toString()).toBe("http://localhost:5000/api/events?q=sparql");
   });
 
+  it("resolves API asset paths against the gateway instead of the MFE origin", () => {
+    expect(apiAssetUrl("/api/events/e1/cover")).toBe("http://localhost:5000/api/events/e1/cover");
+  });
+
   it("attaches the bearer token when a session exists", async () => {
     setAuthToken("dev-token-student-1");
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
@@ -44,6 +48,16 @@ describe("apiFetch", () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ bookingRef: "CP-1" }), { status: 201 }));
     await apiFetch("/events/e1/register", { method: "POST", body: {} });
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ "Content-Type": "application/json" });
+  });
+
+  it("sends multipart bodies without overriding the browser boundary", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ coverUrl: "/api/events/e1/cover" }), { status: 200 }));
+    const body = new FormData();
+    body.append("altText", "Workshop attendees");
+    await apiFetch("/organiser/events/e1/cover", { method: "POST", body });
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(request.body).toBe(body);
+    expect(request.headers).not.toHaveProperty("Content-Type");
   });
 
   it("normalizes API error messages from the body", async () => {

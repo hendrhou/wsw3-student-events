@@ -19,6 +19,7 @@ export interface EventCardProps {
 
 /** EventCard (components.md §2): cover 16:9 → badge + date → title → meta → capacity + CTA. */
 export function EventCard({ title, category, dateLabel, venueTimeLabel, capacity, coverSrc, coverAlt, full = false, onOpen, cta }: EventCardProps) {
+  const [failedCoverSrc, setFailedCoverSrc] = useState<string | null>(null);
   function onKeyDown(e: KeyboardEvent<HTMLElement>) {
     if (e.key === "Enter" && e.target === e.currentTarget) onOpen();
   }
@@ -31,8 +32,8 @@ export function EventCard({ title, category, dateLabel, venueTimeLabel, capacity
       onClick={onOpen}
       onKeyDown={onKeyDown}
     >
-      {coverSrc ? (
-        <img className="cp-card__cover" src={coverSrc} alt={coverAlt ?? ""} loading="lazy" />
+      {coverSrc && failedCoverSrc !== coverSrc ? (
+        <img className="cp-card__cover" src={coverSrc} alt={coverAlt ?? ""} loading="lazy" onError={() => setFailedCoverSrc(coverSrc)} />
       ) : (
         <div className="cp-card__cover" role="img" aria-label={coverAlt ?? "Event cover placeholder"}>
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">

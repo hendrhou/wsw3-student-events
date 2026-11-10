@@ -1,5 +1,11 @@
 name: campus-pulse
 
+# Single orchestration file for the whole distributed system (R3).
+# One documented start-up command: `docker compose up --build` starts
+# EVERYTHING — frontend, gateway, Go services, Postgres, MinIO, Fuseki — and
+# plain `docker compose down` tears it all down. No profiles, no flags.
+
+# Telemetry defaults for every Go service (OTLP via Alloy; see observability/).
 x-telemetry: &telemetry
   APP_ENV: ${APP_ENV:-local}
   APP_VERSION: ${APP_VERSION:-dev}
@@ -7,22 +13,13 @@ x-telemetry: &telemetry
   OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
+# Container logs to Alloy (syslog) then Loki. Short IDs keep RFC5424 MSGID <= 32.
 x-logging: &logging
   driver: syslog
   options:
     syslog-address: udp://127.0.0.1:${SYSLOG_PORT:-1514}
     syslog-format: rfc5424
     tag: '{{.ID}}'
-    mode: non-blocking
-    max-buffer-size: 4m
-
-# Single orchestration file for the whole distributed system (R3).
-# One documented start-up command: `docker compose up --build`.
-#
-# Today: frontend (shell + 2 MFEs) and Kong (declarative config) start by
-# default. Backend services and their databases are profile-gated behind
-# `--profile backend` until each Go/Gin service lands — their build contexts
-# (services/*) are created in later phases.
 
 services:
   # ---------- Frontend (React MFEs, Module Federation) ----------
@@ -32,9 +29,11 @@ services:
       context: ./frontend
       dockerfile: shell/Dockerfile
       args:
-        VITE_STUDENT_MFE_URL: http://localhost:${STUDENT_MFE_PORT:-5001}
-        VITE_ORGANISER_MFE_URL: http://localhost:${ORGANISER_MFE_PORT:-5002}
-        VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+        VITE_EVENTS_MFE_URL: http://localhost:${EVENTS_MFE_PORT:-5001}
+        VITE_PARTICIPATION_MFE_URL: http://localhost:${PARTICIPATION_MFE_PORT:-5002}
+        VITE_CREDENTIALS_MFE_URL: http://localhost:${CREDENTIALS_MFE_PORT:-5003}
+        VITE_PEOPLE_MFE_URL: http://localhost:${PEOPLE_MFE_PORT:-5004}
+        VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
         VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
         VITE_APP_VERSION: ${APP_VERSION:-dev}
         # Containers default to the real backend through Kong; set
@@ -43,32 +42,58 @@ services:
     ports:
       - "${SHELL_PORT:-3000}:80"
     depends_on:
-      - student-mfe
-      - organiser-mfe
+      - events-mfe
+      - participation-mfe
+      - credentials-mfe
+      - people-mfe
 
-  student-mfe:
+  events-mfe:
     logging: *logging
     build:
       context: ./frontend
-      dockerfile: student-mfe/Dockerfile
+      dockerfile: events-mfe/Dockerfile
       args:
-        VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+        VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
         VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
         VITE_APP_VERSION: ${APP_VERSION:-dev}
     ports:
-      - "${STUDENT_MFE_PORT:-5001}:80"
+      - "${EVENTS_MFE_PORT:-5001}:80"
 
-  organiser-mfe:
+  participation-mfe:
     logging: *logging
     build:
       context: ./frontend
-      dockerfile: organiser-mfe/Dockerfile
+      dockerfile: participation-mfe/Dockerfile
       args:
-        VITE_GATEWAY_URL: http://localhost:${KONG_PORT:-8000}/api
+        VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
         VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
         VITE_APP_VERSION: ${APP_VERSION:-dev}
     ports:
-      - "${ORGANISER_MFE_PORT:-5002}:80"
+      - "${PARTICIPATION_MFE_PORT:-5002}:80"
+
+  credentials-mfe:
+    logging: *logging
+    build:
+      context: ./frontend
+      dockerfile: credentials-mfe/Dockerfile
+      args:
+        VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
+    ports:
+      - "${CREDENTIALS_MFE_PORT:-5003}:80"
+
+  people-mfe:
+    logging: *logging
+    build:
+      context: ./frontend
+      dockerfile: people-mfe/Dockerfile
+      args:
+        VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
+    ports:
+      - "${PEOPLE_MFE_PORT:-5004}:80"
 
   # ---------- API gateway (Kong, DB-less declarative mode) ----------
   kong:
@@ -88,73 +113,75 @@ services:
       KONG_ADMIN_ACCESS_LOG: "off"
     volumes:
       - ./gateway/kong.yml:/kong/kong.yml:ro
+    # Host port 80 by default → port-free URLs (http://student.localhost/…).
+    # Override KONG_PORT if 80 is taken; PUBLIC_GATEWAY_URL must match.
     ports:
-      - "${KONG_PORT:-8000}:8000"
-    # Upstreams 503 until the backend profile services are running — expected.
+      - "${KONG_PORT:-80}:8000"
 
-  # ---------- Backend (profile-gated until each service lands) ----------
-  # Each Go/Gin service has its own persistence (R1). Build contexts are
-  # created when the services are implemented.
+  # ---------- Backend (Go/Gin services, each with its own persistence, R1) ----------
   user-service:
     logging: *logging
-    profiles: ["backend"]
     build:
       context: ./services
       dockerfile: user-service/Dockerfile
     environment:
       <<: *telemetry
-      DATABASE_URL: postgres://campus_pulse:campus_pulse@user-db:5432/users
+      DATABASE_URL: postgres://campus_pulse:campus_pulse@postgres:5432/users
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
       FRONTEND_URL: http://localhost:${SHELL_PORT:-3000}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URL: http://localhost:${KONG_PORT:-8000}/api/auth/google/callback
+      GOOGLE_REDIRECT_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}/auth/google/callback
       ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-true}
       # Comma-separated emails promoted to admin at startup (demo default: Olga).
       # Admins manage organisers from the Team screen; admins are env-managed.
       ADMIN_EMAILS: ${ADMIN_EMAILS:-olga@ufp.edu.pt}
       SEMANTIC_SERVICE_URL: http://semantic-service:8080
     depends_on:
-      user-db:
+      postgres:
         condition: service_healthy
 
   event-service:
     logging: *logging
-    profiles: ["backend"]
     build:
       context: ./services
       dockerfile: event-service/Dockerfile
     environment:
       <<: *telemetry
-      DATABASE_URL: postgres://campus_pulse:campus_pulse@event-db:5432/events
+      DATABASE_URL: postgres://campus_pulse:campus_pulse@postgres:5432/events
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
       SEMANTIC_SERVICE_URL: http://semantic-service:8080
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-campus-pulse}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-change-me}
+      MINIO_BUCKET: event-covers
+      MINIO_USE_SSL: "false"
     depends_on:
-      event-db:
+      postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   registration-service:
     logging: *logging
-    profiles: ["backend"]
     build:
       context: ./services
       dockerfile: registration-service/Dockerfile
     environment:
       <<: *telemetry
-      DATABASE_URL: postgres://campus_pulse:campus_pulse@registration-db:5432/registrations
+      DATABASE_URL: postgres://campus_pulse:campus_pulse@postgres:5432/registrations
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
       EVENT_SERVICE_URL: http://event-service:8080
       TICKET_SERVICE_URL: http://ticket-service:8080
     depends_on:
-      registration-db:
+      postgres:
         condition: service_healthy
 
   semantic-service:
     logging: *logging
-    profiles: ["backend"]
     build:
       context: ./services
       dockerfile: semantic-service/Dockerfile
@@ -172,65 +199,95 @@ services:
 
   ticket-service:
     logging: *logging
-    profiles: ["backend"]
     build:
       context: ./services
       dockerfile: ticket-service/Dockerfile
     environment:
       <<: *telemetry
-      DATABASE_URL: postgres://campus_pulse:campus_pulse@ticket-db:5432/tickets
+      DATABASE_URL: postgres://campus_pulse:campus_pulse@postgres:5432/tickets
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
       REGISTRATION_SERVICE_URL: http://registration-service:8080
-      PUBLIC_BASE_URL: http://localhost:${KONG_PORT:-8000}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
     depends_on:
-      ticket-db:
+      postgres:
         condition: service_healthy
 
-  # ---------- Persistence (one store per service) ----------
-  user-db: &postgres
-    profiles: ["backend"]
+  # ---------- Persistence (one PostgreSQL instance, one database per service) ----------
+  minio:
+    logging: *logging
+    build:
+      context: ./services/minio
+      args:
+        MINIO_VERSION: RELEASE.2025-10-15T17-29-55Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-campus-pulse}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-minio-change-me}
+    # No host ports: event-service uploads/reads covers in-network; browsers get
+    # images via Kong → event-service /api/events/:id/cover.
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/minio/health/ready >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    logging: *logging
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: campus_pulse
       POSTGRES_PASSWORD: campus_pulse
       POSTGRES_DB: users
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./services/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U campus_pulse"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-  event-db:
-    <<: *postgres
-    environment:
-      POSTGRES_USER: campus_pulse
-      POSTGRES_PASSWORD: campus_pulse
-      POSTGRES_DB: events
-
-  registration-db:
-    <<: *postgres
-    environment:
-      POSTGRES_USER: campus_pulse
-      POSTGRES_PASSWORD: campus_pulse
-      POSTGRES_DB: registrations
-
-  ticket-db:
-    <<: *postgres
-    environment:
-      POSTGRES_USER: campus_pulse
-      POSTGRES_PASSWORD: campus_pulse
-      POSTGRES_DB: tickets
-
-  # RDF triple store for the semantic layer (SPARQL endpoint)
+  # RDF triple store for the semantic layer. Internal-only: SPARQL reaches it
+  # via semantic-service (R8's API boundary), never from the host.
   fuseki:
-    profiles: ["backend"]
+    logging: *logging
     image: stain/jena-fuseki:5.1.0
     environment:
       ADMIN_PASSWORD: campus_pulse
-    ports:
-      - "${FUSEKI_PORT:-3030}:3030"
 
+  # ---------- Observability UI ----------
+  # Exposed ONLY through Kong: http://grafana.localhost (host route).
+  # No host port — like the backends, Grafana is internal to the compose network.
+  grafana:
+    logging: *logging
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_METRICS_ENABLED: "true"
+      # Public URL is the Kong host route so login redirects and assets resolve.
+      GF_SERVER_ROOT_URL: ${PUBLIC_GRAFANA_URL:-http://grafana.localhost}/
+    volumes:
+      # Datasources and dashboards are provisioned as code (observability/).
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ---------- Observability stack (config as code in observability/) ----------
+  # Alloy receives container logs (syslog) and OTLP telemetry from services and
+  # Kong; Prometheus/Loki/Tempo store them; Grafana queries them. Only Alloy's
+  # syslog input and Prometheus' debug UI bind localhost; everything else stays
+  # internal to the compose network (Grafana is the Kong-routed front-end).
   alloy:
     image: grafana/alloy:v1.11.0
     command: [run, --server.http.listen-addr=0.0.0.0:12345, --storage.path=/var/lib/alloy, /etc/alloy/config.alloy]
@@ -272,29 +329,11 @@ services:
     mem_limit: 512m
     restart: unless-stopped
 
-  grafana:
-    image: grafana/grafana:12.2.0
-    environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in your local .env}
-      GF_AUTH_ANONYMOUS_ENABLED: "false"
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
-      GF_PLUGINS_PREINSTALL_DISABLED: "true"
-      GF_METRICS_ENABLED: "true"
-    volumes:
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana-data:/var/lib/grafana
-    ports:
-      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
-    mem_limit: 256m
-    restart: unless-stopped
-
 volumes:
+  postgres-data:
+  minio-data:
+  grafana-data:
   alloy-data:
   prometheus-data:
   loki-data:
   tempo-data:
-  grafana-data:

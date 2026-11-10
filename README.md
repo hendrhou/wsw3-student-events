@@ -32,8 +32,8 @@ frontend/               React micro frontends (this is the runnable app today)
 
 The backend described in the protocol §2.1 is implemented: Kong API
 gateway + five Go/Gin services (`user`, `event`, `registration`, `semantic`,
-`ticket`), each with its own Postgres database, plus a Jena Fuseki triple
-store for the semantic layer — all orchestrated from a single root
+`ticket`), each with its own database on one shared Postgres instance, plus a
+Jena Fuseki triple store for the semantic layer — all orchestrated from a single root
 `docker-compose.yml`.
 
 ## Quick start
@@ -45,20 +45,49 @@ value (for example, generate one with `openssl rand -hex 24`). The example
 environment file intentionally leaves it empty.
 
 ```sh
-docker compose --profile backend up --build
-# → http://localhost:3000  (shell composing both MFEs)
-# → http://localhost:8000  (Kong gateway, /api/*)
-# → http://localhost:3001  (Grafana, login required)
-# → http://localhost:9090  (Prometheus, localhost only)
+docker compose up --build
+# → http://localhost:3000  (shell composing the four MFEs)
+# → http://localhost         (Kong gateway on port 80, /api/*)
 ```
 
-19 containers come up: shell + 2 MFEs, Kong, the five Go services, four
-Postgres databases, Fuseki, and Prometheus/Grafana/Loki/Tempo/Alloy.
-The frontend containers talk to the real
-backend through Kong (MSW off). Sign in with **Developer access** on the
-login page (Vítor = student, Olga = organiser) — Google OIDC is wired and
-activates as soon as `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are provided
-in `.env`.
+Friendly hostnames are served through the gateway (Kong routes by Host header):
+
+| URL | Area |
+| --- | --- |
+| http://student.localhost | Student area (discovery, tickets, profile) |
+| http://organiser.localhost | Organiser area (events, check-in, team) |
+| http://grafana.localhost | Grafana (observability UI) |
+
+`*.localhost` resolves to loopback natively on macOS and Linux — no DNS
+server, hosts-file edits, or sudo required.
+
+Exposure model: the browser only ever reaches the shell (:3000), the four MFE
+bundle servers (:5001–5004, Module Federation remotes), and Kong (:80). All
+Go services, Postgres, MinIO, Fuseki and Grafana are internal to the compose
+network — Grafana is reachable exclusively through the Kong host route.
+Observability config lives as code in `observability/` (Alloy, Prometheus,
+Loki, Tempo, Grafana datasources + dashboards); Prometheus' debug UI binds
+localhost only (:9090).
+
+20 containers come up: shell + 4 domain MFEs (events, participation,
+credentials, people), Kong, the five Go services, one Postgres instance with
+four service databases, MinIO (event cover images), Fuseki, and the
+observability stack (Alloy, Prometheus, Loki, Tempo, Grafana). There are no
+profiles: `docker compose up` / `down` manage the whole system. The frontend
+containers talk to the real backend through Kong (MSW off). Sign in with
+**Developer access** on the login page (Vítor = student, Olga = organiser) —
+Google OIDC is wired and activates as soon as
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are provided in `.env`. Grafana
+signs in with `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` from `.env`
+(dev defaults: admin/admin).
+
+For local Google OIDC, use a **Web application** OAuth client and register
+`http://localhost/api/auth/google/callback` as an authorized redirect URI
+in Google Cloud Console (adjust the port if `KONG_PORT` changes). Set
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`, then recreate
+`user-service` to apply them. Only verified Google Workspace accounts with
+the `ufp.edu.pt` hosted-domain claim are accepted. First Google sign-in links
+any email-provisioned account, preserving its role, student number and interests.
 
 ### Option B — Frontend only in Docker
 
@@ -126,4 +155,3 @@ Coverage gates are enforced per package (≥80% lines/statements).
 | OWL ontology + RDF transformation (Fuseki, SPARQL recommendations) | ✅ PR #16 |
 | Web 3.0 VC issuance/verification (VC-JWT, did:key) | ✅ PR #15 |
 | AWS deployment (Terraform apply + release pipeline) | ⬜ manual, after merge |
-

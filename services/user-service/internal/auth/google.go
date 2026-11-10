@@ -28,13 +28,20 @@ type GoogleConfig struct {
 
 func (g GoogleConfig) Configured() bool { return g.ClientID != "" && g.ClientSecret != "" }
 
+// loginState is the server-side record for an in-flight OAuth login: expiry
+// plus the validated origin the user should return to (friendly hostnames).
+type loginState struct {
+	expires time.Time
+	origin  string
+}
+
 // GoogleFlow manages the Authorization Code flow. State is kept in memory
 // (single-replica dev/course deployment; multi-replica would need a store).
 type GoogleFlow struct {
 	cfg      GoogleConfig
 	oauth    *oauth2.Config
 	verifier *oidc.IDTokenVerifier
-	states   map[string]time.Time
+	states   map[string]loginState
 	mu       sync.Mutex
 }
 
@@ -58,17 +65,20 @@ func NewGoogleFlow(ctx context.Context, cfg GoogleConfig) (*GoogleFlow, error) {
 			Endpoint:     google.Endpoint,
 		},
 		verifier: provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
-		states:   map[string]time.Time{},
+		states:   map[string]loginState{},
 	}, nil
 }
 
 // LoginURL builds the Google consent URL with the hosted-domain hint.
-func (f *GoogleFlow) LoginURL() (url, state string) {
+// origin is the validated return origin stored with the state — Google echoes
+// state back untouched, so the callback can return the user to the friendly
+// hostname they started from without Google ever seeing it.
+func (f *GoogleFlow) LoginURL(origin string) (url, state string) {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	state = hex.EncodeToString(b)
 	f.mu.Lock()
-	f.states[state] = time.Now().Add(5 * time.Minute)
+	f.states[state] = loginState{expires: time.Now().Add(5 * time.Minute), origin: origin}
 	f.mu.Unlock()
 	return f.oauth.AuthCodeURL(state, oauth2.SetAuthURLParam("hd", "ufp.edu.pt")), state
 }
@@ -85,27 +95,29 @@ type Identity struct {
 
 // Exchange validates the callback: state, code exchange, ID token signature,
 // email_verified, and the hosted-domain claim (the actual restriction — the
-// login hint is cosmetic).
-func (f *GoogleFlow) Exchange(ctx context.Context, state, code string) (*Identity, error) {
+// login hint is cosmetic). Returns the origin stored at login ("" if the state
+// is unknown) so callers can return the user to the right hostname even when
+// the exchange itself fails (e.g. hd restriction).
+func (f *GoogleFlow) Exchange(ctx context.Context, state, code string) (*Identity, string, error) {
 	f.mu.Lock()
-	expiry, ok := f.states[state]
+	entry, ok := f.states[state]
 	delete(f.states, state)
 	f.mu.Unlock()
-	if !ok || time.Now().After(expiry) {
-		return nil, errors.New("invalid or expired state")
+	if !ok || time.Now().After(entry.expires) {
+		return nil, "", errors.New("invalid or expired state")
 	}
 
 	token, err := f.oauth.Exchange(ctx, code)
 	if err != nil {
-		return nil, fmt.Errorf("code exchange: %w", err)
+		return nil, entry.origin, fmt.Errorf("code exchange: %w", err)
 	}
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		return nil, errors.New("missing id_token")
+		return nil, entry.origin, errors.New("missing id_token")
 	}
 	idToken, err := f.verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		return nil, fmt.Errorf("id_token verification: %w", err)
+		return nil, entry.origin, fmt.Errorf("id_token verification: %w", err)
 	}
 
 	var claims struct {
@@ -115,15 +127,15 @@ func (f *GoogleFlow) Exchange(ctx context.Context, state, code string) (*Identit
 		HD            string `json:"hd"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
-		return nil, err
+		return nil, entry.origin, err
 	}
 	if !claims.EmailVerified {
-		return nil, errors.New("google account email is not verified")
+		return nil, entry.origin, errors.New("google account email is not verified")
 	}
 	if claims.HD != "ufp.edu.pt" {
-		return nil, ErrHDRestriction
+		return nil, entry.origin, ErrHDRestriction
 	}
-	return &Identity{Subject: idToken.Subject, Email: claims.Email, Name: claims.Name, EmailVerified: true}, nil
+	return &Identity{Subject: idToken.Subject, Email: claims.Email, Name: claims.Name, EmailVerified: true}, entry.origin, nil
 }
 
 // DevLoginBody is accepted only when ALLOW_DEV_LOGIN=true (local/tests).

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Table, type TableColumn } from "./Table";
 import { EventCard, RecommendationCard } from "./EventCard";
@@ -63,6 +63,14 @@ describe("EventCard", () => {
   it("shows a Full badge at full capacity", () => {
     render(<EventCard {...base} full onOpen={() => {}} />);
     expect(screen.getByText("Full")).toBeInTheDocument();
+  });
+
+  it("falls back to the cover placeholder when the image cannot load", () => {
+    const alt = "Students in a workshop";
+    const { container } = render(<EventCard {...base} coverSrc="/api/events/e1/cover" coverAlt={alt} onOpen={() => {}} />);
+    fireEvent.error(screen.getByRole("img", { name: alt }));
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: alt })).not.toHaveAttribute("src");
   });
 });
 

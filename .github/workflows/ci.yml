@@ -25,7 +25,7 @@ jobs:
           git fetch origin "${{ github.base_ref }}" --depth=1 -q || true
           BASE=$(git merge-base HEAD "origin/${{ github.base_ref }}" 2>/dev/null || echo HEAD~1)
           CHANGED=$(git diff --name-only "$BASE"...HEAD)
-          echo "frontend=$([ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "frontend=$([ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml|gateway/)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "go=$([ -n "$(echo "$CHANGED" | grep -E '^services/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "infra=$([ -n "$(echo "$CHANGED" | grep -E '^infra/terraform/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
@@ -52,7 +52,7 @@ jobs:
       - name: Tests with coverage gates
         run: pnpm -r run test
       - name: Production builds (Module Federation entries)
-        run: pnpm -r --filter "@campus-pulse/shell" --filter "@campus-pulse/student-mfe" --filter "@campus-pulse/organiser-mfe" run build
+        run: pnpm -r run build
 
   go:
     needs: changes
@@ -63,11 +63,29 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: services/go.work
+      # go.work: ./... has no module at the workspace root — enumerate modules.
       - name: Vet
-        run: cd services && go vet ./...
-      - name: Tests
-        run: cd services && go test ./...
-      # Integration tests that need Postgres skip gracefully without Docker.
+        run: cd services && go vet ./shared/... ./event-service/... ./user-service/... ./registration-service/... ./ticket-service/... ./semantic-service/...
+      - name: Unit and handler tests
+        run: cd services && go test ./shared/... ./event-service/... ./user-service/... ./registration-service/... ./ticket-service/... ./semantic-service/...
+      - name: Start PostgreSQL for store integration tests
+        run: |
+          docker run -d --name pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16-alpine
+          for _ in $(seq 1 30); do docker exec pg pg_isready -U postgres -q && break; sleep 1; done
+          docker exec -i pg psql -U postgres -qc 'CREATE DATABASE users_test' -c 'CREATE DATABASE events_test' -c 'CREATE DATABASE registrations_test'
+      - name: Apply service migrations
+        run: |
+          for s in user event registration; do
+            for f in services/$s-service/internal/store/migrations/*.sql; do
+              docker exec -i pg psql -U postgres -d ${s}s_test -qf - < "$f"
+            done
+          done
+      - name: Store integration tests (real PostgreSQL)
+        run: |
+          cd services
+          TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/users_test?sslmode=disable' go test ./user-service/internal/store -count=1
+          TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/events_test?sslmode=disable' go test ./event-service/internal/store -count=1
+          TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/registrations_test?sslmode=disable' go test ./registration-service/internal/store -count=1
 
   docker-smoke:
     needs: changes
@@ -75,10 +93,76 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build compose images
-        run: docker compose build
       - name: Compose config validates
-        run: docker compose config -q && docker compose --profile backend config -q
+        run: docker compose config -q
+
+  contract:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@9.15.0 --activate
+      - name: Install
+        run: cd frontend && pnpm install --frozen-lockfile
+      - name: Start backend stack (gateway + Go services + Postgres + MinIO + Fuseki)
+        run: docker compose up -d --build --wait --wait-timeout 600 kong postgres minio fuseki user-service event-service registration-service semantic-service ticket-service
+      - name: Wait for the gateway
+        run: |
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/api/events || true)
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          curl -sf http://localhost/api/events > /dev/null
+      - name: Live contract tests (Go services vs shared Zod schemas)
+        run: cd frontend && CP_GATEWAY_URL=http://localhost/api pnpm --filter @campus-pulse/api test:contract
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@9.15.0 --activate
+      - name: Install
+        run: cd frontend && pnpm install --frozen-lockfile
+      - name: Start the full stack
+        run: docker compose up -d --build --wait --wait-timeout 600
+      - name: Wait for the shell and gateway
+        run: |
+          for _ in $(seq 1 90); do
+            web=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login || true)
+            api=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/api/events || true)
+            [ "$web" = "200" ] && [ "$api" = "200" ] && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000/login > /dev/null && curl -sf http://localhost/api/events > /dev/null
+      - name: Install Chromium
+        run: cd frontend && pnpm --filter @campus-pulse/e2e exec playwright install --with-deps chromium
+      - name: End-to-end tests (all business journeys)
+        run: cd frontend && pnpm --filter @campus-pulse/e2e test:e2e
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/e2e/playwright-report
+          retention-days: 7
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
 
   terraform-validate:
     needs: changes

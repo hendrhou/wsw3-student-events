@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -54,12 +55,37 @@ func RegisterRoutes(r *gin.Engine, h *Handlers) {
 	admin.DELETE("/api/admin/organisers/:email", h.revokeOrganiser)
 }
 
+// resolveOrigin validates the caller-supplied return origin for the OAuth
+// round-trip (open-redirect guard). Allowed: the configured frontend URL, and
+// any plain-http loopback origin — localhost, *.localhost, 127.0.0.1 on any
+// port — so friendly hostnames and per-machine ports work on every dev machine
+// without configuration. Anything else silently falls back to the frontend URL.
+func resolveOrigin(raw, fallback string) string {
+	fallback = strings.TrimRight(fallback, "/")
+	trimmed := strings.TrimRight(raw, "/")
+	if trimmed == "" {
+		return fallback
+	}
+	if trimmed == fallback {
+		return trimmed
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Scheme != "http" || u.Path != "" || u.RawQuery != "" || u.User != nil {
+		return fallback
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" || strings.HasSuffix(host, ".localhost") {
+		return trimmed
+	}
+	return fallback
+}
+
 func (h *Handlers) googleLogin(c *gin.Context) {
 	if h.Google == nil {
 		httpx.Abort(c, http.StatusServiceUnavailable, "Google sign-in is not configured on this environment — use developer access locally")
 		return
 	}
-	url, _ := h.Google.LoginURL()
+	url, _ := h.Google.LoginURL(resolveOrigin(c.Query("origin"), h.FrontendURL))
 	c.Redirect(http.StatusFound, url)
 }
 
@@ -68,14 +94,14 @@ func (h *Handlers) googleCallback(c *gin.Context) {
 		httpx.Abort(c, http.StatusServiceUnavailable, "Google sign-in is not configured on this environment")
 		return
 	}
-	identity, err := h.Google.Exchange(c.Request.Context(), c.Query("state"), c.Query("code"))
+	identity, origin, err := h.Google.Exchange(c.Request.Context(), c.Query("state"), c.Query("code"))
 	if err != nil {
 		if errors.Is(err, auth.ErrHDRestriction) {
-			h.redirectWithError(c, "only-ufp")
+			h.redirectWithError(c, "only-ufp", origin)
 			return
 		}
 		h.Logger.WarnContext(c.Request.Context(), "oidc callback failed", "error", err)
-		h.redirectWithError(c, "oidc-failed")
+		h.redirectWithError(c, "oidc-failed", origin)
 		return
 	}
 	user, err := h.Store.UpsertByGoogleSub(c.Request.Context(), identity.Subject, identity.Email, identity.Name)
@@ -84,20 +110,29 @@ func (h *Handlers) googleCallback(c *gin.Context) {
 		httpx.Internal(c)
 		return
 	}
-	h.issueAndRedirect(c, user)
+	h.issueAndRedirect(c, user, origin)
 }
 
-func (h *Handlers) redirectWithError(c *gin.Context, code string) {
-	c.Redirect(http.StatusFound, strings.TrimRight(h.FrontendURL, "/")+"/login?error="+code)
+// originOrDefault returns the validated login origin, falling back to the
+// configured frontend URL when the state carried none (e.g. old login links).
+func (h *Handlers) originOrDefault(origin string) string {
+	if origin == "" {
+		return strings.TrimRight(h.FrontendURL, "/")
+	}
+	return origin
 }
 
-func (h *Handlers) issueAndRedirect(c *gin.Context, user *store.User) {
+func (h *Handlers) redirectWithError(c *gin.Context, code, origin string) {
+	c.Redirect(http.StatusFound, h.originOrDefault(origin)+"/login?error="+code)
+}
+
+func (h *Handlers) issueAndRedirect(c *gin.Context, user *store.User, origin string) {
 	token, err := h.Issuer.Issue(user.ID, user.Name, user.Email, user.StudentNumber, user.Role)
 	if err != nil {
 		httpx.Internal(c)
 		return
 	}
-	c.Redirect(http.StatusFound, strings.TrimRight(h.FrontendURL, "/")+"/auth/callback?token="+token)
+	c.Redirect(http.StatusFound, h.originOrDefault(origin)+"/auth/callback?token="+token)
 }
 
 // devLogin exists for local development and automated tests. It is only

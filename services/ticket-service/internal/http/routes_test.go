@@ -76,6 +76,10 @@ func (f *fakeStore) MarkVerified(_ context.Context, ref string) error {
 
 const testSecret = "test-secret-key-1234567890"
 
+// futureEventDate keeps wallet/status assertions time-safe: ticket status and
+// credential expiry derive from the event date, so hardcoded dates rot.
+func futureEventDate() string { return time.Now().Add(72 * time.Hour).Format("2006-01-02") }
+
 func testHandlers(st Store) *Handlers {
 	seed := make([]byte, 32)
 	for i := range seed {
@@ -114,7 +118,7 @@ func TestIssueThenWalletThenPublicVerify(t *testing.T) {
 	// 1. registration-service triggers issuance
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/internal/tickets", strings.NewReader(
-		`{"bookingRef":"CP-2026-10001","eventId":"evt-hackathon","eventTitle":"UFP Hackathon 2026","dateVenueLabel":"Sat 7 Nov · Main Hall","eventDate":"2026-11-07","userId":"usr_vitor","userName":"Vítor Carvalho","studentNumber":"20220123"}`))
+		`{"bookingRef":"CP-2026-10001","eventId":"evt-hackathon","eventTitle":"UFP Hackathon 2026","dateVenueLabel":"Sat 7 Nov · Main Hall","eventDate":"`+futureEventDate()+`","userId":"usr_vitor","userName":"Vítor Carvalho","studentNumber":"20220123"}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	if w.Code != 201 {
@@ -191,7 +195,7 @@ func TestCredentialStatusOwnership(t *testing.T) {
 	r := setup(h)
 	if err := h.IssueOne(context.Background(), issueBody{
 		BookingRef: "CP-1", EventID: "e1", EventTitle: "T", DateVenueLabel: "d",
-		EventDate: "2026-12-01", UserID: "usr_other", UserName: "O", StudentNumber: "999",
+		EventDate: futureEventDate(), UserID: "usr_other", UserName: "O", StudentNumber: "999",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +214,7 @@ func TestMarkVerifiedIsIdempotent(t *testing.T) {
 	r := setup(h)
 	if err := h.IssueOne(context.Background(), issueBody{
 		BookingRef: "CP-2", EventID: "e1", EventTitle: "T", DateVenueLabel: "d",
-		EventDate: "2026-12-01", UserID: "usr_vitor", UserName: "V", StudentNumber: "20220123",
+		EventDate: futureEventDate(), UserID: "usr_vitor", UserName: "V", StudentNumber: "20220123",
 	}); err != nil {
 		t.Fatal(err)
 	}

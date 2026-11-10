@@ -8,10 +8,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hendrhou/wsw3-student-events/services/event-service/internal/blobstore"
 	"github.com/hendrhou/wsw3-student-events/services/event-service/internal/store"
 	"github.com/hendrhou/wsw3-student-events/services/shared/authx"
 	"github.com/hendrhou/wsw3-student-events/services/shared/httpx"
@@ -27,21 +29,31 @@ type Store interface {
 	AdjustCounters(ctx context.Context, id string, usedDelta, checkedInDelta int) error
 }
 
+type CoverMetadataStore interface {
+	SetCover(ctx context.Context, id, organiserID, key, altText string) (string, error)
+	ClearCover(ctx context.Context, id, organiserID string) (string, error)
+}
+
 type Handlers struct {
-	Store       Store
-	Issuer      *authx.Issuer
-	Logger      *slog.Logger
-	SemanticURL string // optional push-on-write ingestion target
+	Store         Store
+	CoverMetadata CoverMetadataStore
+	Blobs         blobstore.Store
+	Issuer        *authx.Issuer
+	Logger        *slog.Logger
+	SemanticURL   string // optional push-on-write ingestion target
 }
 
 func RegisterRoutes(r *gin.Engine, h *Handlers) {
 	r.GET("/api/events", h.listEvents)
 	r.GET("/api/events/:id", h.getEvent)
+	r.GET("/api/events/:id/cover", h.getCover)
 
 	organiser := r.Group("/", authx.RequireAuth(h.Issuer), authx.RequireRole("organiser"))
 	organiser.GET("/api/organiser/events", h.listMine)
 	organiser.POST("/api/organiser/events", h.createEvent)
 	organiser.PATCH("/api/organiser/events/:id", h.updateEvent)
+	organiser.POST("/api/organiser/events/:id/cover", h.uploadCover)
+	organiser.DELETE("/api/organiser/events/:id/cover", h.deleteCover)
 
 	// Service-to-service (compose network only; not routed by Kong)
 	r.POST("/internal/events/:id/counters", h.adjustCounters)
@@ -76,6 +88,7 @@ type detailDTO struct {
 	summaryDTO
 	ShortDescription     string         `json:"shortDescription"`
 	About                string         `json:"about"`
+	CoverAltText         *string        `json:"coverAltText"`
 	Organiser            string         `json:"organiser"`
 	Competences          []string       `json:"competences"`
 	Schedule             []scheduleItem `json:"schedule"`
@@ -90,10 +103,15 @@ type organiserDTO struct {
 }
 
 func toSummary(e *store.Event) summaryDTO {
+	coverURL := e.CoverURL
+	if e.CoverObjectKey != "" {
+		path := "/api/events/" + url.PathEscape(e.ID) + "/cover"
+		coverURL = &path
+	}
 	return summaryDTO{
 		ID: e.ID, Title: e.Title, Category: e.Category,
 		Date: e.Date.Format("2006-01-02"), StartTime: e.StartTime, EndTime: e.EndTime,
-		Venue: e.Venue, CoverURL: e.CoverURL,
+		Venue: e.Venue, CoverURL: coverURL,
 		Capacity: capacityDTO{Used: e.CapacityUsed, Total: e.CapacityTotal},
 		Full:     e.CapacityUsed >= e.CapacityTotal,
 	}
@@ -114,6 +132,7 @@ func toDetail(e *store.Event) detailDTO {
 		summaryDTO:           toSummary(e),
 		ShortDescription:     e.ShortDescription,
 		About:                e.About,
+		CoverAltText:         e.CoverAltText,
 		Organiser:            e.OrganiserName,
 		Competences:          nonNilStrings(e.Competences),
 		Schedule:             schedule,
