@@ -176,3 +176,5 @@ Web 3.0 component (R9).
 | Frontend | React (shell + 2 MFEs) | Student & organiser interfaces |
 | Web 3.0 | Verifiable credentials (JWT/JSON-LD), optional test-network registry | Decentralised ticket verification |
 | Orchestration | Docker + Docker Compose | Reproducible local deployment |
+
+CI trigger probe — harmless docs change.
