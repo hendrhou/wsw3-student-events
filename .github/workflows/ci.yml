@@ -22,12 +22,16 @@ jobs:
           fetch-depth: 0
       - id: filter
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1 -q || true
+          # Full fetch of the base ref: --depth=1 leaves merge-base without
+          # shared history, which silently falls back to HEAD~1 and skips jobs.
+          git fetch origin "${{ github.base_ref }}" -q || true
           BASE=$(git merge-base HEAD "origin/${{ github.base_ref }}" 2>/dev/null || echo HEAD~1)
           CHANGED=$(git diff --name-only "$BASE"...HEAD)
-          echo "frontend=$([ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml|gateway/)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "go=$([ -n "$(echo "$CHANGED" | grep -E '^services/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "infra=$([ -n "$(echo "$CHANGED" | grep -E '^infra/terraform/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          # Workflow changes must self-test: run every area when CI itself changes.
+          CI_CHANGED=$([ -n "$(echo "$CHANGED" | grep -E '^\.github/workflows/')" ] && echo true || echo false)
+          echo "frontend=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml|gateway/)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "go=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^services/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "infra=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^infra/terraform/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   frontend:
     needs: changes
@@ -71,7 +75,13 @@ jobs:
       - name: Start PostgreSQL for store integration tests
         run: |
           docker run -d --name pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16-alpine
-          for _ in $(seq 1 30); do docker exec pg pg_isready -U postgres -q && break; sleep 1; done
+          # Wait on TCP, not the container unix socket: the image's bootstrap
+          # server only listens on the socket, so socket pg_isready can pass
+          # during bootstrap and the next command hits the shutdown.
+          for _ in $(seq 1 60); do
+            docker exec -e PGPASSWORD=postgres pg psql -U postgres -h 127.0.0.1 -tAc 'SELECT 1' >/dev/null 2>&1 && break
+            sleep 1
+          done
           docker exec -i pg psql -U postgres -qc 'CREATE DATABASE users_test' -c 'CREATE DATABASE events_test' -c 'CREATE DATABASE registrations_test'
       - name: Apply service migrations
         run: |
