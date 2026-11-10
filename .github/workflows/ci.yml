@@ -22,12 +22,16 @@ jobs:
           fetch-depth: 0
       - id: filter
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1 -q || true
+          # Full fetch of the base ref: --depth=1 leaves merge-base without
+          # shared history, which silently falls back to HEAD~1 and skips jobs.
+          git fetch origin "${{ github.base_ref }}" -q || true
           BASE=$(git merge-base HEAD "origin/${{ github.base_ref }}" 2>/dev/null || echo HEAD~1)
           CHANGED=$(git diff --name-only "$BASE"...HEAD)
-          echo "frontend=$([ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml|gateway/)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "go=$([ -n "$(echo "$CHANGED" | grep -E '^services/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "infra=$([ -n "$(echo "$CHANGED" | grep -E '^infra/terraform/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          # Workflow changes must self-test: run every area when CI itself changes.
+          CI_CHANGED=$([ -n "$(echo "$CHANGED" | grep -E '^\.github/workflows/')" ] && echo true || echo false)
+          echo "frontend=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml|gateway/)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "go=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^services/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "infra=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^infra/terraform/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   frontend:
     needs: changes
