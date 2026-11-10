@@ -63,9 +63,15 @@ export async function listMyTickets(): Promise<Ticket[]> {
   return z.array(TicketSchema).parse(data);
 }
 
-export async function getCredentialStatus(ticketId: string) {
-  const data = await apiFetch<unknown>(`/tickets/${encodeURIComponent(ticketId)}/credential-status`);
+// The ticket-service keys credential status by booking reference (not ticket id).
+export async function getCredentialStatus(bookingRef: string) {
+  const data = await apiFetch<unknown>(`/tickets/${encodeURIComponent(bookingRef)}/credential-status`);
   return z.object({ status: CredentialStatusSchema }).parse(data);
+}
+
+export async function verifyCredential(token: string) {
+  const data = await apiFetch<unknown>("/tickets/verify", { query: { token } });
+  return z.object({ valid: z.boolean(), bookingRef: z.string().optional(), reason: z.string().optional(), eventTitle: z.string().optional() }).parse(data);
 }
 
 export async function searchInterests(q: string): Promise<Interest[]> {
@@ -93,6 +99,18 @@ export async function createEvent(payload: EventPayload): Promise<{ id: string }
 export async function updateEvent(id: string, payload: EventPayload): Promise<{ id: string }> {
   const data = await apiFetch<unknown>(`/organiser/events/${encodeURIComponent(id)}`, { method: "PATCH", body: EventPayloadSchema.parse(payload) });
   return z.object({ id: z.string() }).parse(data);
+}
+
+export async function uploadEventCover(eventId: string, file: File | undefined, altText: string): Promise<{ coverUrl: string; coverAltText: string }> {
+  const body = new FormData();
+  if (file) body.append("file", file);
+  body.append("altText", altText);
+  const data = await apiFetch<unknown>(`/organiser/events/${encodeURIComponent(eventId)}/cover`, { method: "POST", body });
+  return z.object({ coverUrl: z.string(), coverAltText: z.string() }).parse(data);
+}
+
+export async function deleteEventCover(eventId: string): Promise<void> {
+  await apiFetch<unknown>(`/organiser/events/${encodeURIComponent(eventId)}/cover`, { method: "DELETE" });
 }
 
 export async function listRegistrations(eventId: string, tab: "registered" | "waitlist" | "cancelled"): Promise<RegistrationRow[]> {

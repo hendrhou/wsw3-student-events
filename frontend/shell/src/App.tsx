@@ -1,49 +1,23 @@
-import { Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Button, Navbar, Skeleton, ToastRegion, type ToastData } from "@campus-pulse/ui";
+import { Button, Navbar, Skeleton, ToastRegion } from "@campus-pulse/ui";
 import { RequireRole, useAuth, googleLoginUrl, devLogin, type Role } from "./auth";
-
-function RemoteFallback() {
-  return (
-    <div className="cp-page" aria-busy="true" aria-label="Loading module">
-      <Skeleton height={40} />
-      <Skeleton height={240} />
-      <Skeleton height={240} />
-    </div>
-  );
-}
-
-// Stable loader references: Module Federation resolves these once; keeping
-// them module-level lets Remote's effect depend on them safely.
-const loadStudentMfe = () => import("studentMfe/App");
-const loadOrganiserMfe = () => import("organiserMfe/App");
-
-function Remote({ load }: { load: () => Promise<{ default: ComponentType }> }) {
-  const [Component, setComponent] = useState<ComponentType | null>(null);
-  const [error, setError] = useState(false);
-  // Loading is a side effect — it must not run during render (React may abort
-  // the render pass, losing the resolution and leaving the remote blank).
-  useEffect(() => {
-    let alive = true;
-    load()
-      .then((m) => { if (alive) setComponent(() => m.default); })
-      .catch(() => { if (alive) setError(true); });
-    return () => { alive = false; };
-  }, [load]);
-  if (error) {
-    return (
-      <div className="cp-page" role="alert">
-        <p>This module is unavailable right now.</p>
-        <Button variant="secondary" onClick={() => window.location.reload()}>Retry</Button>
-      </div>
-    );
-  }
-  return (
-    <Suspense fallback={<RemoteFallback />}>
-      {Component ? <Component /> : <RemoteFallback />}
-    </Suspense>
-  );
-}
+import { HostServicesProvider } from "./host";
+import { useNotifications } from "./notifications";
+import {
+  CheckInPage,
+  DiscoverPage,
+  EditEventPage,
+  EventPage,
+  ManageEventsPage,
+  NewEventPage,
+  PreviewEventPage,
+  ProfilePage,
+  RegisterPage,
+  RegistrationsPage,
+  TeamPage,
+  TicketsPage,
+} from "./screens";
 
 function studentNav(pathname: string) {
   return [
@@ -280,17 +254,77 @@ function ForbiddenPage() {
   );
 }
 
-/** Toast host shared by the shell; MFEs push toasts via window events (interim). */
-export function useToasts() {
-  const [toasts, setToasts] = useState<ToastData[]>([]);
-  return {
-    toasts,
-    dismiss: (id: string) => setToasts((t) => t.filter((x) => x.id !== id)),
-  };
+/**
+ * Fallback for unknown student paths. Never navigates when the location is
+ * outside the student namespace (e.g. /organiser): during shell transitions
+ * this Routes tree can still observe foreign locations and must not yank the
+ * user back mid-switch.
+ */
+function StudentFallback() {
+  const { pathname } = useLocation();
+  const foreign = ["/organiser", "/login", "/auth", "/forbidden"].some((p) => pathname.startsWith(p));
+  if (foreign) return null;
+  return <Navigate to="/events" replace />;
+}
+
+/** Same discipline as StudentFallback, scoped to the organiser namespace. */
+function OrganiserFallback() {
+  const { pathname } = useLocation();
+  if (!pathname.startsWith("/organiser")) return null;
+  return <Navigate to="." replace />;
+}
+
+/** Student area: discovery, registration, wallet and profile screens. */
+function StudentArea() {
+  return (
+    <RequireRole requiredRole="user">
+      <ShellFrame navRole="user">
+        <HostServicesProvider>
+          <Routes>
+            <Route path="/events" element={<DiscoverPage />} />
+            <Route path="/events/:eventId" element={<EventPage />} />
+            <Route path="/events/:eventId/register" element={<RegisterPage />} />
+            <Route path="/tickets" element={<TicketsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="*" element={<StudentFallback />} />
+          </Routes>
+        </HostServicesProvider>
+      </ShellFrame>
+    </RequireRole>
+  );
+}
+
+/** Organiser area: event management, registrations, check-in and team access. */
+function OrganiserArea() {
+  return (
+    <RequireRole requiredRole="organiser">
+      <ShellFrame navRole="organiser">
+        <HostServicesProvider>
+          <Routes>
+            <Route index element={<ManageEventsPage />} />
+            <Route path="events/new" element={<NewEventPage />} />
+            <Route path="events/:eventId/edit" element={<EditEventPage />} />
+            <Route path="events/:eventId/preview" element={<PreviewEventPage />} />
+            <Route path="events/:eventId/registrations" element={<RegistrationsPage />} />
+            <Route path="events/:eventId/check-in" element={<CheckInPage />} />
+            <Route path="team" element={<TeamPage />} />
+            <Route path="*" element={<OrganiserFallback />} />
+          </Routes>
+        </HostServicesProvider>
+      </ShellFrame>
+    </RequireRole>
+  );
+}
+
+/** Landing: friendly hostnames pick the area (organiser.campus-pulse.test → /organiser). */
+function HomeRedirect() {
+  const host = window.location.hostname;
+  return <Navigate to={host.startsWith("organiser.") ? "/organiser" : "/events"} replace />;
 }
 
 export default function App() {
-  const { toasts, dismiss } = useToasts();
+  const toasts = useNotifications((s) => s.toasts);
+  const dismiss = useNotifications((s) => s.dismiss);
   return (
     <div className="cp-root">
       <ToastRegion toasts={toasts} onDismiss={dismiss} />
@@ -298,27 +332,9 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/forbidden" element={<ForbiddenPage />} />
-        <Route path="/" element={<Navigate to="/events" replace />} />
-        <Route
-          path="/organiser/*"
-          element={
-            <RequireRole requiredRole="organiser">
-              <ShellFrame navRole="organiser">
-                <Remote load={loadOrganiserMfe} />
-              </ShellFrame>
-            </RequireRole>
-          }
-        />
-        <Route
-          path="/*"
-          element={
-            <RequireRole requiredRole="user">
-              <ShellFrame navRole="user">
-                <Remote load={loadStudentMfe} />
-              </ShellFrame>
-            </RequireRole>
-          }
-        />
+        <Route path="/" element={<HomeRedirect />} />
+        <Route path="/organiser/*" element={<OrganiserArea />} />
+        <Route path="/*" element={<StudentArea />} />
       </Routes>
     </div>
   );

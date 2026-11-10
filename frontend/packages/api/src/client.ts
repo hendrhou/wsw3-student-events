@@ -30,6 +30,20 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
+export function apiAssetUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  try {
+    return new URL(path).toString();
+  } catch {
+    const { gatewayUrl } = getConfig();
+    const origin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+    const gateway = new URL(gatewayUrl, origin);
+    const base = new URL(`${gateway.pathname.replace(/\/+$/, "")}/`, gateway.origin);
+    const relativePath = path.replace(/^\/+/, "").replace(/^api\//, "");
+    return new URL(relativePath, base).toString();
+  }
+}
+
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
@@ -48,16 +62,17 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   const token = getAuthToken();
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   let response: Response;
   try {
     response = await fetch(url, {
       method: options.method ?? "GET",
       headers: {
         Accept: "application/json",
-        ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(options.body !== undefined && !isFormData ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: isFormData ? options.body as FormData : options.body !== undefined ? JSON.stringify(options.body) : undefined,
       credentials: "include",
     });
   } catch {

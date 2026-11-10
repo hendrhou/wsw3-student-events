@@ -262,7 +262,10 @@ func TestExportCSVRespectsSearch(t *testing.T) {
 	if !strings.Contains(body, "Ana Silva") || strings.Contains(body, "Bruno") {
 		t.Errorf("csv filter wrong: %q", body)
 	}
-	if !strings.HasPrefix(body, "name,student_number") {
+	if !strings.Contains(body, "CP-1") {
+		t.Errorf("csv must carry the booking reference (ticket reconciliation): %q", body)
+	}
+	if !strings.HasPrefix(body, "booking_ref,name,student_number") {
 		t.Errorf("missing header: %q", body)
 	}
 }

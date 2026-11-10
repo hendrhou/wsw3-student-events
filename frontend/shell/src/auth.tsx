@@ -72,7 +72,11 @@ export const useAuth = create<AuthState>((set) => ({
 }));
 
 export function googleLoginUrl(): string {
-  return `${getConfig().gatewayUrl}/auth/google/login`;
+  // Carry the current origin through the OAuth state so sign-in returns the
+  // user to the same friendly hostname (student./organiser.localhost, any port).
+  const url = new URL(`${getConfig().gatewayUrl}/auth/google/login`, window.location.origin);
+  url.searchParams.set("origin", window.location.origin);
+  return url.toString();
 }
 
 /** Dev-only login (local): the endpoint exists only when ALLOW_DEV_LOGIN=true. */

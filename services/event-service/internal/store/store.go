@@ -31,6 +31,8 @@ type Event struct {
 	EndTime              string
 	Venue                string
 	CoverURL             *string
+	CoverObjectKey       string
+	CoverAltText         *string
 	CapacityTotal        int
 	CapacityUsed         int
 	CheckedIn            int
@@ -110,14 +112,16 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return nil
 }
 
+// cover_object_key is NULL until a cover is uploaded; the domain model uses ""
+// for "no cover", so coalesce at read (scanning NULL into string fails).
 const columns = `id, title, category, short_description, about, event_date, start_time, end_time, venue,
-	cover_url, capacity_total, capacity_used, checked_in, registration_deadline, lifecycle_status,
+	cover_url, COALESCE(cover_object_key, ''), cover_alt_text, capacity_total, capacity_used, checked_in, registration_deadline, lifecycle_status,
 	organiser_id, organiser_name, competences, schedule, online, online_url, topics`
 
 func scanEvent(row pgx.Row) (*Event, error) {
 	var e Event
 	err := row.Scan(&e.ID, &e.Title, &e.Category, &e.ShortDescription, &e.About, &e.Date, &e.StartTime, &e.EndTime,
-		&e.Venue, &e.CoverURL, &e.CapacityTotal, &e.CapacityUsed, &e.CheckedIn, &e.RegistrationDeadline,
+		&e.Venue, &e.CoverURL, &e.CoverObjectKey, &e.CoverAltText, &e.CapacityTotal, &e.CapacityUsed, &e.CheckedIn, &e.RegistrationDeadline,
 		&e.LifecycleStatus, &e.OrganiserID, &e.OrganiserName, &e.Competences, &e.Schedule, &e.Online, &e.OnlineURL, &e.Topics)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -223,6 +227,45 @@ func (s *Store) Update(ctx context.Context, id, organiserID string, e *Event) er
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (s *Store) SetCover(ctx context.Context, id, organiserID, key, altText string) (string, error) {
+	return s.changeCover(ctx, id, organiserID, key, &altText)
+}
+
+func (s *Store) ClearCover(ctx context.Context, id, organiserID string) (string, error) {
+	return s.changeCover(ctx, id, organiserID, "", nil)
+}
+
+func (s *Store) changeCover(ctx context.Context, id, organiserID, key string, altText *string) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	var oldKey string
+	err = tx.QueryRow(ctx, `SELECT COALESCE(cover_object_key, '') FROM events WHERE id=$1 AND organiser_id=$2 FOR UPDATE`, id, organiserID).Scan(&oldKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE events SET cover_object_key=$3, cover_alt_text=$4 WHERE id=$1 AND organiser_id=$2`, id, organiserID, nullableString(key), altText); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return oldKey, nil
+}
+
+func nullableString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 // AdjustCounters moves the registration/attendance counters (called by

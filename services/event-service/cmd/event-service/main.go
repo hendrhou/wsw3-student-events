@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hendrhou/wsw3-student-events/services/event-service/internal/blobstore"
 	"github.com/hendrhou/wsw3-student-events/services/event-service/internal/http"
 	"github.com/hendrhou/wsw3-student-events/services/event-service/internal/store"
 	"github.com/hendrhou/wsw3-student-events/services/shared/authx"
@@ -22,7 +23,9 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	cfg, err := configuration.Load([]string{"DATABASE_URL", "JWT_SECRET"})
+	cfg, err := configuration.Load([]string{
+		"DATABASE_URL", "JWT_SECRET", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_BUCKET", "MINIO_USE_SSL",
+	})
 	if err != nil {
 		logger.Error("configuration invalid", "error", err)
 		os.Exit(1)
@@ -39,6 +42,16 @@ func main() {
 		logger.Error("migrations failed", "error", err)
 		os.Exit(1)
 	}
+	minioSecure, err := strconv.ParseBool(os.Getenv("MINIO_USE_SSL"))
+	if err != nil {
+		logger.Error("MINIO_USE_SSL must be true or false", "error", err)
+		os.Exit(1)
+	}
+	blobs, err := blobstore.NewMinIO(ctx, os.Getenv("MINIO_ENDPOINT"), os.Getenv("MINIO_ACCESS_KEY"), os.Getenv("MINIO_SECRET_KEY"), os.Getenv("MINIO_BUCKET"), minioSecure)
+	if err != nil {
+		logger.Error("MinIO storage unavailable", "error", err)
+		os.Exit(1)
+	}
 
 	issuer, err := authx.NewIssuer(os.Getenv("JWT_SECRET"), 24*time.Hour)
 	if err != nil {
@@ -53,10 +66,12 @@ func main() {
 	router.Use(httpx.RequestLogger(logger), httpx.Recovery(logger))
 	httpx.Healthz(router)
 	http.RegisterRoutes(router, &http.Handlers{
-		Store:       st,
-		Issuer:      issuer,
-		Logger:      logger,
-		SemanticURL: os.Getenv("SEMANTIC_SERVICE_URL"),
+		Store:         st,
+		CoverMetadata: st,
+		Blobs:         blobs,
+		Issuer:        issuer,
+		Logger:        logger,
+		SemanticURL:   os.Getenv("SEMANTIC_SERVICE_URL"),
 	})
 
 	logger.Info("event-service listening", "port", cfg.Port, "env", cfg.Env)

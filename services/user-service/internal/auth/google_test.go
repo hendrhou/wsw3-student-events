@@ -2,9 +2,10 @@ package auth
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -31,9 +32,9 @@ func TestLoginURLCarriesHostedDomainHintAndState(t *testing.T) {
 			Scopes:      []string{"openid", "email", "profile"},
 			Endpoint:    google.Endpoint,
 		},
-		states: map[string]time.Time{},
+		states: map[string]loginState{},
 	}
-	url, state := f.LoginURL()
+	url, state := f.LoginURL("http://student.localhost:8000")
 	if state == "" {
 		t.Fatal("state must be generated")
 	}
@@ -42,12 +43,36 @@ func TestLoginURLCarriesHostedDomainHintAndState(t *testing.T) {
 			t.Errorf("login URL missing %q: %s", want, url)
 		}
 	}
+	if got := f.states[state].origin; got != "http://student.localhost:8000" {
+		t.Fatalf("state must store the return origin, got %q", got)
+	}
 }
 
 func TestExchangeRejectsUnknownState(t *testing.T) {
-	f := &GoogleFlow{states: map[string]time.Time{}}
-	if _, err := f.Exchange(context.Background(), "bogus", "code"); err == nil {
-		t.Error("unknown state must fail")
+	f := &GoogleFlow{states: map[string]loginState{}}
+	if _, origin, err := f.Exchange(context.Background(), "bogus", "code"); err == nil || origin != "" {
+		t.Error("unknown state must fail with no origin")
+	}
+}
+
+func TestExchangeReturnsStoredOriginOnFailure(t *testing.T) {
+	// Hermetic token endpoint: the code exchange fails fast and locally.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"error":"invalid_grant"}`, http.StatusBadRequest)
+	}))
+	t.Cleanup(srv.Close)
+	f := &GoogleFlow{
+		oauth:  &oauth2.Config{ClientID: "cid", ClientSecret: "sec", Endpoint: oauth2.Endpoint{TokenURL: srv.URL}},
+		states: map[string]loginState{},
+	}
+	_, state := f.LoginURL("http://organiser.localhost:8000")
+
+	if _, origin, err := f.Exchange(context.Background(), state, "bogus-code"); err == nil || origin != "http://organiser.localhost:8000" {
+		t.Fatalf("failed exchange must still return the stored origin, got origin=%q err=%v", origin, err)
+	}
+	// State is single-use: a replay must fail and leak nothing.
+	if _, origin, err := f.Exchange(context.Background(), state, "bogus-code"); err == nil || origin != "" {
+		t.Errorf("replayed state must fail with no origin, got origin=%q err=%v", origin, err)
 	}
 }
 

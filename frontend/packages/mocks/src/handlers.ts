@@ -64,6 +64,12 @@ export const handlers = [
 
   http.patch(stripApi("/api/organiser/events/:id"), ({ params }) => HttpResponse.json({ id: params.id })),
 
+  http.post(stripApi("/api/organiser/events/:id/cover"), ({ params }) =>
+    HttpResponse.json({ coverUrl: `/api/events/${params.id}/cover`, coverAltText: "Mock cover" }),
+  ),
+
+  http.delete(stripApi("/api/organiser/events/:id/cover"), () => new HttpResponse(null, { status: 204 })),
+
   http.get(stripApi("/api/organiser/events/:id/registrations"), ({ request }) => {
     const url = new URL(request.url);
     const tab = url.searchParams.get("tab") ?? "registered";

@@ -23,6 +23,7 @@ export type EventSummary = z.infer<typeof EventSummarySchema>;
 export const EventDetailSchema = EventSummarySchema.extend({
   shortDescription: z.string(),
   about: z.string(),
+  coverAltText: z.string().nullable().optional(),
   organiser: z.string(),
   competences: z.array(z.string()),
   schedule: z.array(z.object({ time: z.string(), item: z.string() })),

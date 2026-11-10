@@ -1,0 +1,3 @@
+CREATE DATABASE events;
+CREATE DATABASE registrations;
+CREATE DATABASE tickets;
