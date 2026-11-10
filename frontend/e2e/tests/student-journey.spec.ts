@@ -17,7 +17,12 @@ test.describe("student journey", () => {
     // S1 — discovery with live search filtering.
     await expect(page.getByRole("heading", { name: "Discover events" })).toBeVisible();
     await page.getByRole("searchbox", { name: "Search events" }).fill(event.title);
-    const card = page.getByRole("link", { name: event.title });
+    // Scope to the main grid: the recommendations row can also surface the
+    // seeded event (topic match), which would resolve the link twice.
+    const allEvents = page.locator("section", {
+      has: page.getByRole("heading", { name: "All upcoming events" }),
+    });
+    const card = allEvents.getByRole("link", { name: event.title });
     await expect(card).toBeVisible();
     await card.click();
 
