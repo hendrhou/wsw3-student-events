@@ -34,7 +34,8 @@ jobs:
       - name: Go gates (when services exist)
         run: |
           if [ -f services/go.work ]; then
-            cd services && go vet ./... && go test ./...
+            # go.work has no root module — enumerate modules explicitly.
+            cd services && go vet ./shared/... ./event-service/... ./user-service/... ./registration-service/... ./ticket-service/... ./semantic-service/... && go test ./shared/... ./event-service/... ./user-service/... ./registration-service/... ./ticket-service/... ./semantic-service/...
           else
             echo "No Go services yet — skipping"
           fi
@@ -113,7 +114,7 @@ jobs:
           fi
 
   build:
-    needs: [release, aws-check]
+    needs: [release, aws-check, version]
     if: needs.aws-check.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -130,7 +131,7 @@ jobs:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           SHA=$(git rev-parse --short HEAD)
-          for img in shell student-mfe organiser-mfe; do
+          for img in shell events-mfe participation-mfe credentials-mfe people-mfe; do
             docker build -t "$REGISTRY/campus-pulse-$img:$TAG" -t "$REGISTRY/campus-pulse-$img:$SHA" \
               -f "frontend/$img/Dockerfile" frontend/
             docker push "$REGISTRY/campus-pulse-$img:$TAG"
@@ -145,7 +146,7 @@ jobs:
           done
 
   deploy:
-    needs: [build, aws-check]
+    needs: [build, aws-check, version]
     if: needs.aws-check.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     environment: production
@@ -162,9 +163,9 @@ jobs:
           cd frontend
           corepack enable && pnpm install --frozen-lockfile
           VITE_APP_VERSION="$TAG" VITE_GATEWAY_URL=/api VITE_USE_MSW=false pnpm -r run build
-          aws s3 sync shell/dist "s3://${{ vars.FRONTEND_BUCKET }}/shell" --delete
-          aws s3 sync student-mfe/dist "s3://${{ vars.FRONTEND_BUCKET }}/student-mfe" --delete
-          aws s3 sync organiser-mfe/dist "s3://${{ vars.FRONTEND_BUCKET }}/organiser-mfe" --delete
+          for mfe in shell events-mfe participation-mfe credentials-mfe people-mfe; do
+            aws s3 sync "$mfe/dist" "s3://${{ vars.FRONTEND_BUCKET }}/$mfe" --delete
+          done
           aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
       - name: Update ECS services to the release tag
         env:

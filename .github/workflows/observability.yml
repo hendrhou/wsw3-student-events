@@ -46,20 +46,25 @@ jobs:
         run: node --test observability/dashboards.test.mjs
       - name: Validate configurations and alert rules
         run: |
-          docker compose --profile backend config -q
+          docker compose config -q
           docker run --rm -v "$PWD/observability:/etc/alloy:ro" grafana/alloy:v1.11.0 validate /etc/alloy/alloy.alloy
           docker run --rm --entrypoint promtool -v "$PWD/observability:/etc/prometheus:ro" prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
           docker run --rm --entrypoint promtool -w /etc/prometheus/rules -v "$PWD/observability:/etc/prometheus:ro" prom/prometheus:v3.5.0 test rules services.test.yml
           docker run --rm -e KONG_DATABASE=off -v "$PWD/gateway/kong.yml:/config/kong.yml:ro" kong:3.9 kong config parse /config/kong.yml > /dev/null
       - name: Start full stack
-        run: docker compose --profile backend up -d --build --wait --wait-timeout 180
+        run: docker compose up -d --build --wait --wait-timeout 600
+      - name: Map the Kong host route for Grafana (Kong routes by Host header)
+        run: echo "127.0.0.1 grafana.localhost" | sudo tee -a /etc/hosts
       - name: Live ingestion, correlation, dashboard queries and distributed registration trace
         env:
           SMOKE_WRITE_TESTS: "true"
+          SMOKE_GATEWAY_URL: "http://localhost"
+          SMOKE_GRAFANA_URL: "http://grafana.localhost"
+          SMOKE_PROMETHEUS_URL: "http://localhost:9090"
         run: node --test observability/smoke.test.mjs
       - name: Container diagnostics on failure
         if: failure()
-        run: docker compose --profile backend ps && docker compose --profile backend logs --tail=80
+        run: docker compose ps && docker compose logs --tail=80
       - name: Stop isolated CI stack
         if: always()
-        run: docker compose --profile backend down -v
+        run: docker compose down -v
