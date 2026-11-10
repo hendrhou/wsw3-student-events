@@ -29,7 +29,7 @@ jobs:
           CHANGED=$(git diff --name-only "$BASE"...HEAD)
           # Workflow changes must self-test: run every area when CI itself changes.
           CI_CHANGED=$([ -n "$(echo "$CHANGED" | grep -E '^\.github/workflows/')" ] && echo true || echo false)
-          echo "frontend=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml|gateway/)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "frontend=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^(frontend/|docker-compose.yml|gateway/|observability/)')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "go=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^services/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "infra=$([ "$CI_CHANGED" = true ] || [ -n "$(echo "$CHANGED" | grep -E '^infra/terraform/')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
@@ -55,6 +55,9 @@ jobs:
         run: pnpm -r run typecheck
       - name: Tests with coverage gates
         run: pnpm -r run test
+      - name: Generated dashboard definitions
+        working-directory: .
+        run: node --test observability/dashboards.test.mjs
       - name: Production builds (Module Federation entries)
         run: pnpm -r run build
 

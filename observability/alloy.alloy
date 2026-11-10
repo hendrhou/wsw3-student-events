@@ -1,0 +1,135 @@
+logging {
+  level = "warn"
+  format = "json"
+}
+
+otelcol.receiver.otlp "services" {
+  http { endpoint = "0.0.0.0:4318" }
+  output { traces = [otelcol.processor.transform.safe.input] }
+}
+
+otelcol.receiver.otlp "browser" {
+  http {
+    endpoint = "0.0.0.0:4319"
+    max_request_body_size = "256KiB"
+  }
+  output {
+    traces = [otelcol.processor.transform.browser.input]
+    metrics = [otelcol.processor.transform.browser.input]
+    logs = [otelcol.processor.transform.browser.input]
+  }
+}
+
+otelcol.processor.transform "browser" {
+  error_mode = "ignore"
+  trace_statements {
+    context = "resource"
+    statements = ["set(attributes[\"service.name\"], \"campus-pulse-browser\")", "set(attributes[\"deployment.environment.name\"], \"local\")"]
+  }
+  metric_statements {
+    context = "resource"
+    statements = ["set(attributes[\"service.name\"], \"campus-pulse-browser\")", "set(attributes[\"deployment.environment.name\"], \"local\")"]
+  }
+  log_statements {
+    context = "resource"
+    statements = ["set(attributes[\"service.name\"], \"campus-pulse-browser\")", "set(attributes[\"deployment.environment.name\"], \"local\")"]
+  }
+  output {
+    traces = [otelcol.processor.transform.safe.input]
+    metrics = [otelcol.processor.transform.safe.input]
+    logs = [otelcol.processor.transform.safe.input]
+  }
+}
+
+otelcol.processor.transform "safe" {
+  error_mode = "ignore"
+  trace_statements {
+    context = "span"
+    statements = [
+      "keep_keys(attributes, [\"http.route\", \"http.request.method\", \"http.response.status_code\", \"http.method\", \"http.status_code\", \"server.address\", \"mfe\", \"route\", \"error.type\"])",
+    ]
+  }
+  metric_statements {
+    context = "datapoint"
+    statements = [
+      "keep_keys(attributes, [\"http.route\", \"http.request.method\", \"http.response.status_code\", \"mfe\", \"route\", \"error.type\"])",
+    ]
+  }
+  log_statements {
+    context = "log"
+    statements = [
+      "keep_keys(attributes, [\"mfe\", \"route\", \"error.type\"])",
+    ]
+  }
+  output {
+    traces = [otelcol.processor.memory_limiter.default.input]
+    metrics = [otelcol.processor.memory_limiter.default.input]
+    logs = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+otelcol.processor.memory_limiter "default" {
+  check_interval = "1s"
+  limit = "384MiB"
+  spike_limit = "64MiB"
+  output {
+    traces = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
+    logs = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  timeout = "2s"
+  send_batch_size = 512
+  send_batch_max_size = 1024
+  output {
+    traces = [otelcol.exporter.otlphttp.tempo.input]
+    metrics = [otelcol.exporter.prometheus.browser.input]
+    logs = [otelcol.exporter.otlphttp.loki.input]
+  }
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  client { endpoint = "http://tempo:4318" }
+  sending_queue { queue_size = 256 }
+  retry_on_failure { max_elapsed_time = "10s" }
+}
+
+otelcol.exporter.otlphttp "loki" {
+  client { endpoint = "http://loki:3100/otlp" }
+  sending_queue { queue_size = 256 }
+  retry_on_failure { max_elapsed_time = "10s" }
+}
+
+otelcol.exporter.prometheus "browser" {
+  forward_to = [prometheus.remote_write.default.receiver]
+  resource_to_telemetry_conversion = true
+}
+
+prometheus.remote_write "default" {
+  endpoint { url = "http://prometheus:9090/api/v1/write" }
+}
+
+loki.source.syslog "containers" {
+  listener {
+    address = "0.0.0.0:1514"
+    protocol = "udp"
+    syslog_format = "rfc5424"
+    labels = { source = "containers" }
+  }
+  forward_to = [loki.process.json.receiver]
+}
+
+loki.process "json" {
+  stage.json {
+    expressions = { service_name = "service_name", level = "level", environment = "environment" }
+    drop_malformed = true
+  }
+  stage.labels { values = { service_name = "", level = "", environment = "" } }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint { url = "http://loki:3100/loki/api/v1/push" }
+}

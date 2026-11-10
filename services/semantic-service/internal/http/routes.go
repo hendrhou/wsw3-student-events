@@ -57,7 +57,7 @@ type interestDTO struct {
 func (h *Handlers) searchInterests(c *gin.Context) {
 	rows, err := h.SPARQL.Select(c.Request.Context(), sparql.SearchInterests(c.Query("q")))
 	if err != nil {
-		h.Logger.Error("interest search failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "interest search failed", "error", err)
 		httpx.Abort(c, 502, "ontology store unavailable")
 		return
 	}
@@ -99,7 +99,7 @@ func (h *Handlers) recommendations(c *gin.Context) {
 
 	rows, err := h.SPARQL.Select(ctx, sparql.RecommendationsForUser(userURI))
 	if err != nil {
-		h.Logger.Error("recommendation query failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "recommendation query failed", "error", err)
 		httpx.Abort(c, 502, "recommendations unavailable")
 		return
 	}
@@ -112,7 +112,7 @@ func (h *Handlers) recommendations(c *gin.Context) {
 		}
 		event, err := h.Events.GetEvent(ctx, eventID)
 		if err != nil {
-			h.Logger.Warn("recommended event missing from catalogue", "event", eventID, "error", err)
+			h.Logger.WarnContext(c.Request.Context(), "recommended event missing from catalogue", "error", err)
 			continue
 		}
 		topicLabel := row["topicLabel"]
@@ -153,7 +153,7 @@ func (h *Handlers) ingestEvent(c *gin.Context) {
 	}
 	b.WriteString(" .")
 	if err := h.SPARQL.LoadTurtle(c.Request.Context(), "@prefix cp: <https://campus-pulse.ufp.pt/ontology#> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n"+b.String()); err != nil {
-		h.Logger.Error("event ingestion failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "event ingestion failed", "error", err)
 		httpx.Abort(c, 502, "ontology store unavailable")
 		return
 	}
@@ -180,7 +180,7 @@ func (h *Handlers) ingestInterests(c *gin.Context) {
 		b.WriteString(fmt.Sprintf("<https://campus-pulse.ufp.pt/users/%s> a cp:Participant ; cp:hasInterest cp:%s .\n", body.UserID, frag))
 	}
 	if err := h.SPARQL.LoadTurtle(c.Request.Context(), "@prefix cp: <https://campus-pulse.ufp.pt/ontology#> .\n"+b.String()); err != nil {
-		h.Logger.Error("interest ingestion failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "interest ingestion failed", "error", err)
 		httpx.Abort(c, 502, "ontology store unavailable")
 		return
 	}

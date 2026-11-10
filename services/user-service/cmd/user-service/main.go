@@ -14,13 +14,20 @@ import (
 	"github.com/hendrhou/wsw3-student-events/services/shared/authx"
 	"github.com/hendrhou/wsw3-student-events/services/shared/configuration"
 	"github.com/hendrhou/wsw3-student-events/services/shared/httpx"
+	"github.com/hendrhou/wsw3-student-events/services/shared/telemetry"
 	"github.com/hendrhou/wsw3-student-events/services/user-service/internal/auth"
 	"github.com/hendrhou/wsw3-student-events/services/user-service/internal/http"
 	"github.com/hendrhou/wsw3-student-events/services/user-service/internal/store"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	observability, err := telemetry.Start("user-service")
+	if err != nil {
+		slog.Error("telemetry configuration invalid", "error", err)
+		os.Exit(1)
+	}
+	defer telemetry.Flush(observability)
+	logger := observability.Logger
 	slog.SetDefault(logger)
 
 	cfg, err := configuration.Load([]string{"DATABASE_URL", "JWT_SECRET"})
@@ -36,6 +43,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer st.Close()
+	if err := observability.ObservePool(st.Stats); err != nil {
+		logger.Error("database metrics setup failed", "error", err)
+		os.Exit(1)
+	}
 	if err := st.Migrate(ctx); err != nil {
 		logger.Error("migrations failed", "error", err)
 		os.Exit(1)
@@ -49,10 +60,10 @@ func main() {
 			continue
 		}
 		if _, err := st.SetRoleByEmail(ctx, email, "admin"); err != nil {
-			logger.Error("admin bootstrap failed", "email", email, "error", err)
+			logger.Error("admin bootstrap failed", "error", err)
 			os.Exit(1)
 		}
-		logger.Info("admin provisioned", "email", email)
+		logger.Info("admin provisioned")
 	}
 
 	issuer, err := authx.NewIssuer(os.Getenv("JWT_SECRET"), 24*time.Hour)
@@ -78,7 +89,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router := gin.New()
-	router.Use(httpx.RequestLogger(logger), httpx.Recovery(logger))
+	router.Use(observability.Middleware(), httpx.RequestLogger(logger), httpx.Recovery(logger))
 	httpx.Healthz(router)
 	http.RegisterRoutes(router, &http.Handlers{
 		Store:         st,
@@ -92,7 +103,7 @@ func main() {
 
 	addr := ":" + strconv.Itoa(cfg.Port)
 	logger.Info("user-service listening", "port", cfg.Port, "env", cfg.Env, "devLogin", os.Getenv("ALLOW_DEV_LOGIN") == "true")
-	if err := router.Run(addr); err != nil {
+	if err := observability.Serve(router, addr); err != nil {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}

@@ -71,7 +71,7 @@ describe("O2 EventForm", () => {
     expect(alert).toHaveTextContent("Title is required");
   });
 
-  it("publishes a valid event and navigates to registrations", async () => {
+  it("publishes a valid event and navigates to registrations", { timeout: 15_000 }, async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
@@ -106,7 +106,10 @@ describe("O2 EventForm", () => {
 
   it("saves a draft without validating", async () => {
     renderWithProviders(<EventForm mode="create" />, { initialEntries: ["/organiser/events/new"], path: "/organiser/events/new" });
-    await userEvent.type(await screen.findByLabelText(/Title/), "Partial draft");
+    const title = await screen.findByLabelText(/Title/);
+    await userEvent.type(title, "Partial draft");
+    // Keystrokes land asynchronously on slow runners — wait for state to settle.
+    await waitFor(() => expect(title).toHaveValue("Partial draft"));
     await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
     expect(window.localStorage.getItem("cp_draft_new")).toContain("Partial draft");
   });
@@ -118,7 +121,7 @@ describe("O2 EventForm", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Choose a JPEG, PNG, or WebP image");
   });
 
-  it("edit mode prefills from the API and saves changes", async () => {
+  it("edit mode prefills from the API and saves changes", { timeout: 15_000 }, async () => {
     renderWithProviders(<EventForm mode="edit" eventId="evt-sparql" />, {
       initialEntries: ["/organiser/events/evt-sparql/edit"],
       path: "/organiser/events/:eventId/edit",

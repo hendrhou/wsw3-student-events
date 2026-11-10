@@ -13,12 +13,15 @@ func RequestLogger(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
-		logger.Info("request",
+		path := c.FullPath()
+		if path == "" {
+			path = "unmatched"
+		}
+		logger.InfoContext(c.Request.Context(), "request",
 			"method", c.Request.Method,
-			"path", c.Request.URL.Path,
+			"path", path,
 			"status", c.Writer.Status(),
 			"latency_ms", time.Since(start).Milliseconds(),
-			"client_ip", c.ClientIP(),
 		)
 	}
 }
@@ -28,7 +31,7 @@ func Recovery(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Error("panic", "error", r, "path", c.Request.URL.Path)
+				logger.ErrorContext(c.Request.Context(), "panic", "error", r, "path", c.FullPath())
 				Internal(c)
 			}
 		}()
