@@ -27,7 +27,11 @@ test.describe("student journey", () => {
     await card.click();
 
     // S2 — detail with the registration panel composed from participation-mfe.
-    await expect(page.getByRole("heading", { name: event.title })).toBeVisible();
+    // Wait for the route change first: the remote chunk loads async, and while
+    // the feed is still mounted both card titles match a bare heading locator
+    // (strict mode violation in CI, where chunks load slower).
+    await expect(page).toHaveURL(/\/events\/.+/);
+    await expect(page.getByRole("heading", { name: event.title, level: 1 })).toBeVisible();
     await page.getByRole("button", { name: "Register", exact: true }).click();
 
     // S3 — policy gate → review → confirm.
