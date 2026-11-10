@@ -1,0 +1,178 @@
+name: Release
+
+# Everything on main is versioned and deployed. Strictly sequential:
+#   test → version → release → build → deploy
+# Versioning is driven by conventional commits since the last tag:
+#   feat:* → minor · fix:/perf: → patch · BREAKING CHANGE → major
+# Merges that only touch docs/chore/test do not produce a release.
+# build/deploy no-op cleanly until the AWS OIDC role variable exists.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # tag + GitHub Release
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@9.15.0 --activate
+      - name: Frontend gates
+        run: |
+          cd frontend
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm -r run typecheck
+          pnpm -r run test
+      - name: Go gates (when services exist)
+        run: |
+          if [ -f services/go.work ]; then
+            cd services && go vet ./... && go test ./...
+          else
+            echo "No Go services yet — skipping"
+          fi
+
+  version:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.semver.outputs.tag }}
+      release_needed: ${{ steps.semver.outputs.release_needed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: semver
+        run: |
+          set -e
+          LAST=$(git tag --sort=-v:refname | head -1)
+          LAST=${LAST:-v0.0.0}
+          RANGE="${LAST}..HEAD"
+          [ "$LAST" = "v0.0.0" ] && RANGE="HEAD"
+          LOG=$(git log "$RANGE" --pretty=format:"%s%n%b")
+          MAJOR=$(echo "${LAST#v}" | cut -d. -f1)
+          MINOR=$(echo "${LAST#v}" | cut -d. -f2)
+          PATCH=$(echo "${LAST#v}" | cut -d. -f3)
+          if echo "$LOG" | grep -q "BREAKING CHANGE"; then
+            MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0
+          elif echo "$LOG" | grep -qE "^feat(\(.+\))?:"; then
+            MINOR=$((MINOR+1)); PATCH=0
+          elif echo "$LOG" | grep -qE "^(fix|perf)(\(.+))?:"; then
+            PATCH=$((PATCH+1))
+          else
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
+            echo "tag=$LAST" >> "$GITHUB_OUTPUT"
+            echo "No release-worthy commits since $LAST"
+            exit 0
+          fi
+          TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "release_needed=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Next version: $TAG"
+
+  release:
+    needs: version
+    if: needs.version.outputs.release_needed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag and create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          PREV=$(git tag --sort=-v:refname | grep -v "^$TAG$" | head -1 || true)
+          RANGE="${PREV:-v0.0.0}..HEAD"
+          NOTES=$(git log "$RANGE" --pretty=format:"- %s (%h)" --reverse)
+          git tag "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" --title "$TAG" --notes "$(printf '## Changes\n\n%s' "$NOTES")"
+
+  aws-check:
+    # Discovers whether deployment is configured, without failing when it is not.
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AWS_DEPLOY_ROLE_ARN not set — build/deploy skipped (see infra/terraform/)"
+          fi
+
+  build:
+    needs: [release, aws-check]
+    if: needs.aws-check.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: Build and push all images tagged with the release version
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          for img in shell student-mfe organiser-mfe; do
+            docker build -t "$REGISTRY/campus-pulse-$img:$TAG" -t "$REGISTRY/campus-pulse-$img:$SHA" \
+              -f "frontend/$img/Dockerfile" frontend/
+            docker push "$REGISTRY/campus-pulse-$img:$TAG"
+            docker push "$REGISTRY/campus-pulse-$img:$SHA"
+          done
+          for svc in user event registration semantic ticket; do
+            if [ -f "services/$svc-service/Dockerfile" ]; then
+              docker build -t "$REGISTRY/campus-pulse-$svc-service:$TAG" -t "$REGISTRY/campus-pulse-$svc-service:$SHA" \
+                "services/$svc-service/"
+              docker push --all-tags "$REGISTRY/campus-pulse-$svc-service"
+            fi
+          done
+
+  deploy:
+    needs: [build, aws-check]
+    if: needs.aws-check.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Deploy frontend bundles to S3 + invalidate CloudFront
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          cd frontend
+          corepack enable && pnpm install --frozen-lockfile
+          VITE_APP_VERSION="$TAG" VITE_GATEWAY_URL=/api VITE_USE_MSW=false pnpm -r run build
+          aws s3 sync shell/dist "s3://${{ vars.FRONTEND_BUCKET }}/shell" --delete
+          aws s3 sync student-mfe/dist "s3://${{ vars.FRONTEND_BUCKET }}/student-mfe" --delete
+          aws s3 sync organiser-mfe/dist "s3://${{ vars.FRONTEND_BUCKET }}/organiser-mfe" --delete
+          aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+      - name: Update ECS services to the release tag
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          for svc in kong shell user event registration semantic ticket; do
+            aws ecs update-service \
+              --cluster "${{ vars.ECS_CLUSTER }}" \
+              --service "campus-pulse-$svc" \
+              --force-new-deployment --no-cli-pager || echo "service $svc not found yet — skipping"
+          done

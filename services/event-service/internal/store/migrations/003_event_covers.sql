@@ -1,0 +1,2 @@
+ALTER TABLE events ADD COLUMN IF NOT EXISTS cover_object_key TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS cover_alt_text TEXT;

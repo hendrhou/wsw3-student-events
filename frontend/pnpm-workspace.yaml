@@ -1,5 +1,5 @@
 packages:
   - "shell"
-  - "student-mfe"
-  - "organiser-mfe"
+  - "*-mfe"
   - "packages/*"
+  - "e2e"
