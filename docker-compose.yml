@@ -5,9 +5,26 @@ name: campus-pulse
 # EVERYTHING — frontend, gateway, Go services, Postgres, MinIO, Fuseki — and
 # plain `docker compose down` tears it all down. No profiles, no flags.
 
+# Telemetry defaults for every Go service (OTLP via Alloy; see observability/).
+x-telemetry: &telemetry
+  APP_ENV: ${APP_ENV:-local}
+  APP_VERSION: ${APP_VERSION:-dev}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+# Container logs to Alloy (syslog) then Loki. Short IDs keep RFC5424 MSGID <= 32.
+x-logging: &logging
+  driver: syslog
+  options:
+    syslog-address: udp://127.0.0.1:${SYSLOG_PORT:-1514}
+    syslog-format: rfc5424
+    tag: '{{.ID}}'
+
 services:
   # ---------- Frontend (React MFEs, Module Federation) ----------
   shell:
+    logging: *logging
     build:
       context: ./frontend
       dockerfile: shell/Dockerfile
@@ -17,6 +34,8 @@ services:
         VITE_CREDENTIALS_MFE_URL: http://localhost:${CREDENTIALS_MFE_PORT:-5003}
         VITE_PEOPLE_MFE_URL: http://localhost:${PEOPLE_MFE_PORT:-5004}
         VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
         # Containers default to the real backend through Kong; set
         # VITE_USE_MSW=true in .env to run the frontend against MSW mocks.
         VITE_USE_MSW: ${VITE_USE_MSW:-false}
@@ -29,49 +48,69 @@ services:
       - people-mfe
 
   events-mfe:
+    logging: *logging
     build:
       context: ./frontend
       dockerfile: events-mfe/Dockerfile
       args:
         VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
     ports:
       - "${EVENTS_MFE_PORT:-5001}:80"
 
   participation-mfe:
+    logging: *logging
     build:
       context: ./frontend
       dockerfile: participation-mfe/Dockerfile
       args:
         VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
     ports:
       - "${PARTICIPATION_MFE_PORT:-5002}:80"
 
   credentials-mfe:
+    logging: *logging
     build:
       context: ./frontend
       dockerfile: credentials-mfe/Dockerfile
       args:
         VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
     ports:
       - "${CREDENTIALS_MFE_PORT:-5003}:80"
 
   people-mfe:
+    logging: *logging
     build:
       context: ./frontend
       dockerfile: people-mfe/Dockerfile
       args:
         VITE_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-http://localhost/api}
+        VITE_TELEMETRY_ENABLED: ${VITE_TELEMETRY_ENABLED:-true}
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
     ports:
       - "${PEOPLE_MFE_PORT:-5004}:80"
 
   # ---------- API gateway (Kong, DB-less declarative mode) ----------
   kong:
+    logging: *logging
     image: kong:3.9
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /kong/kong.yml
       KONG_PROXY_LISTEN: 0.0.0.0:8000
       KONG_LOG_LEVEL: info
+      KONG_STATUS_LISTEN: 0.0.0.0:8100
+      KONG_DNS_VALID_TTL: "5"
+      KONG_DNS_STALE_TTL: "1"
+      KONG_TRACING_INSTRUMENTATIONS: all
+      KONG_TRACING_SAMPLING_RATE: ${OTEL_TRACES_SAMPLER_ARG:-1}
+      KONG_PROXY_ACCESS_LOG: "off"
+      KONG_ADMIN_ACCESS_LOG: "off"
     volumes:
       - ./gateway/kong.yml:/kong/kong.yml:ro
     # Host port 80 by default → port-free URLs (http://student.localhost/…).
@@ -81,10 +120,12 @@ services:
 
   # ---------- Backend (Go/Gin services, each with its own persistence, R1) ----------
   user-service:
+    logging: *logging
     build:
       context: ./services
       dockerfile: user-service/Dockerfile
     environment:
+      <<: *telemetry
       DATABASE_URL: postgres://campus_pulse:campus_pulse@postgres:5432/users
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
@@ -102,10 +143,12 @@ services:
         condition: service_healthy
 
   event-service:
+    logging: *logging
     build:
       context: ./services
       dockerfile: event-service/Dockerfile
     environment:
+      <<: *telemetry
       DATABASE_URL: postgres://campus_pulse:campus_pulse@postgres:5432/events
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
@@ -122,10 +165,12 @@ services:
         condition: service_healthy
 
   registration-service:
+    logging: *logging
     build:
       context: ./services
       dockerfile: registration-service/Dockerfile
     environment:
+      <<: *telemetry
       DATABASE_URL: postgres://campus_pulse:campus_pulse@postgres:5432/registrations
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
@@ -136,10 +181,12 @@ services:
         condition: service_healthy
 
   semantic-service:
+    logging: *logging
     build:
       context: ./services
       dockerfile: semantic-service/Dockerfile
     environment:
+      <<: *telemetry
       SPARQL_ENDPOINT: http://fuseki:3030/campus-pulse/sparql
       SPARQL_UPDATE_ENDPOINT: http://fuseki:3030/campus-pulse/update
       FUSEKI_USER: admin
@@ -151,10 +198,12 @@ services:
       - fuseki
 
   ticket-service:
+    logging: *logging
     build:
       context: ./services
       dockerfile: ticket-service/Dockerfile
     environment:
+      <<: *telemetry
       DATABASE_URL: postgres://campus_pulse:campus_pulse@postgres:5432/tickets
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
@@ -166,6 +215,7 @@ services:
 
   # ---------- Persistence (one PostgreSQL instance, one database per service) ----------
   minio:
+    logging: *logging
     build:
       context: ./services/minio
       args:
@@ -185,6 +235,7 @@ services:
       retries: 20
 
   postgres:
+    logging: *logging
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: campus_pulse
@@ -202,6 +253,7 @@ services:
   # RDF triple store for the semantic layer. Internal-only: SPARQL reaches it
   # via semantic-service (R8's API boundary), never from the host.
   fuseki:
+    logging: *logging
     image: stain/jena-fuseki:5.1.0
     environment:
       ADMIN_PASSWORD: campus_pulse
@@ -210,6 +262,7 @@ services:
   # Exposed ONLY through Kong: http://grafana.localhost (host route).
   # No host port — like the backends, Grafana is internal to the compose network.
   grafana:
+    logging: *logging
     image: grafana/grafana:12.2.0
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
@@ -219,12 +272,68 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_METRICS_ENABLED: "true"
       # Public URL is the Kong host route so login redirects and assets resolve.
       GF_SERVER_ROOT_URL: ${PUBLIC_GRAFANA_URL:-http://grafana.localhost}/
     volumes:
+      # Datasources and dashboards are provisioned as code (observability/).
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ---------- Observability stack (config as code in observability/) ----------
+  # Alloy receives container logs (syslog) and OTLP telemetry from services and
+  # Kong; Prometheus/Loki/Tempo store them; Grafana queries them. Only Alloy's
+  # syslog input and Prometheus' debug UI bind localhost; everything else stays
+  # internal to the compose network (Grafana is the Kong-routed front-end).
+  alloy:
+    image: grafana/alloy:v1.11.0
+    command: [run, --server.http.listen-addr=0.0.0.0:12345, --storage.path=/var/lib/alloy, /etc/alloy/config.alloy]
+    volumes:
+      - ./observability/alloy.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy
+    ports:
+      - "127.0.0.1:${SYSLOG_PORT:-1514}:1514/udp"
+    mem_limit: 512m
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=7d, --storage.tsdb.retention.size=1GB, --web.enable-remote-write-receiver]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    mem_limit: 512m
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.5.5
+    command: [-config.file=/etc/loki/config.yml]
+    volumes:
+      - ./observability/loki.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    mem_limit: 512m
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: [-config.file=/etc/tempo/config.yml]
+    volumes:
+      - ./observability/tempo.yml:/etc/tempo/config.yml:ro
+      - tempo-data:/var/tempo
+    mem_limit: 512m
+    restart: unless-stopped
 
 volumes:
   postgres-data:
   minio-data:
   grafana-data:
+  alloy-data:
+  prometheus-data:
+  loki-data:
+  tempo-data:

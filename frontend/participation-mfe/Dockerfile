@@ -7,6 +7,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages ./packages
 COPY participation-mfe ./participation-mfe
 ARG VITE_GATEWAY_URL=/api
+ARG VITE_TELEMETRY_ENABLED=false
+ARG VITE_APP_VERSION=dev
+ENV VITE_TELEMETRY_ENABLED=$VITE_TELEMETRY_ENABLED VITE_APP_VERSION=$VITE_APP_VERSION
 ENV VITE_GATEWAY_URL=$VITE_GATEWAY_URL
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @campus-pulse/participation-mfe build

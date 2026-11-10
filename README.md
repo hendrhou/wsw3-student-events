@@ -27,6 +27,9 @@ frontend/               React micro frontends (this is the runnable app today)
                         mocks (MSW fixtures for dev & tests)
 ```
 
+                        Observability configuration, generated dashboards, alert rules, and verification
+                        tools live in [observability/](observability/README.md).
+
 The backend described in the protocol §2.1 is implemented: Kong API
 gateway + five Go/Gin services (`user`, `event`, `registration`, `semantic`,
 `ticket`), each with its own database on one shared Postgres instance, plus a
@@ -36,6 +39,10 @@ Jena Fuseki triple store for the semantic layer — all orchestrated from a sing
 ## Quick start
 
 ### Option A — Full stack in Docker (frontend + backend)
+
+Set `GRAFANA_ADMIN_PASSWORD` in your local `.env` first, using a private generated
+value (for example, generate one with `openssl rand -hex 24`). The example
+environment file intentionally leaves it empty.
 
 ```sh
 docker compose up --build
@@ -58,15 +65,21 @@ Exposure model: the browser only ever reaches the shell (:3000), the four MFE
 bundle servers (:5001–5004, Module Federation remotes), and Kong (:80). All
 Go services, Postgres, MinIO, Fuseki and Grafana are internal to the compose
 network — Grafana is reachable exclusively through the Kong host route.
+Observability config lives as code in `observability/` (Alloy, Prometheus,
+Loki, Tempo, Grafana datasources + dashboards); Prometheus' debug UI binds
+localhost only (:9090).
 
-13 containers come up: shell + 4 domain MFEs (events, participation,
+20 containers come up: shell + 4 domain MFEs (events, participation,
 credentials, people), Kong, the five Go services, one Postgres instance with
-four service databases, MinIO (event cover images), and Fuseki. There are no
+four service databases, MinIO (event cover images), Fuseki, and the
+observability stack (Alloy, Prometheus, Loki, Tempo, Grafana). There are no
 profiles: `docker compose up` / `down` manage the whole system. The frontend
 containers talk to the real backend through Kong (MSW off). Sign in with
 **Developer access** on the login page (Vítor = student, Olga = organiser) —
 Google OIDC is wired and activates as soon as
-`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are provided in `.env`.
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are provided in `.env`. Grafana
+signs in with `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` from `.env`
+(dev defaults: admin/admin).
 
 For local Google OIDC, use a **Web application** OAuth client and register
 `http://localhost/api/auth/google/callback` as an authorized redirect URI

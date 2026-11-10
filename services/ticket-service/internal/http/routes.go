@@ -202,7 +202,7 @@ func (h *Handlers) issue(c *gin.Context) {
 		return
 	}
 	if err := h.IssueOne(c.Request.Context(), body); err != nil {
-		h.Logger.Error("issuance failed", "bookingRef", body.BookingRef, "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "issuance failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
@@ -253,7 +253,7 @@ func (h *Handlers) SignUnsigned(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		h.Logger.Info("seeded ticket signed", "bookingRef", t.BookingRef)
+		h.Logger.InfoContext(ctx, "seeded ticket signed")
 	}
 	return nil
 }

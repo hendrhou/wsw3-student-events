@@ -1,4 +1,5 @@
 import { getConfig } from "./config";
+import { instrumentedFetch } from "@campus-pulse/telemetry";
 
 export class ApiError extends Error {
   constructor(
@@ -65,7 +66,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await instrumentedFetch(url, {
       method: options.method ?? "GET",
       headers: {
         Accept: "application/json",

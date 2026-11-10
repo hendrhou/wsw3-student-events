@@ -1,0 +1,34 @@
+rule_files:
+  - services.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="campus-services",service_name="event-service",environment="local"}'
+        values: '0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: CampusServiceDown
+        exp_alerts:
+          - exp_labels:
+              job: campus-services
+              service_name: event-service
+              environment: local
+              severity: warning
+            exp_annotations:
+              summary: event-service is unavailable
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_total{service_name="event-service",http_response_status_code="500"}'
+        values: '0+10x15'
+      - series: 'http_server_requests_total{service_name="event-service",http_response_status_code="200"}'
+        values: '0+90x15'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CampusHighErrorRate
+        exp_alerts:
+          - exp_labels:
+              service_name: event-service
+              severity: warning
+            exp_annotations:
+              summary: event-service has over 5% server errors

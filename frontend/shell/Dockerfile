@@ -13,6 +13,9 @@ ARG VITE_PARTICIPATION_MFE_URL=http://localhost:5002
 ARG VITE_CREDENTIALS_MFE_URL=http://localhost:5003
 ARG VITE_PEOPLE_MFE_URL=http://localhost:5004
 ARG VITE_GATEWAY_URL=/api
+ARG VITE_TELEMETRY_ENABLED=false
+ARG VITE_APP_VERSION=dev
+ENV VITE_TELEMETRY_ENABLED=$VITE_TELEMETRY_ENABLED VITE_APP_VERSION=$VITE_APP_VERSION
 # MSW mocks are for local pnpm dev/tests; container builds default to the real
 # backend through Kong. Override with --build-arg VITE_USE_MSW=true.
 ARG VITE_USE_MSW=false

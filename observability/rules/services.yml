@@ -1,0 +1,19 @@
+groups:
+  - name: campus-pulse
+    rules:
+      - record: campus:http_requests:rate5m
+        expr: sum by (service_name, environment) (rate(http_server_requests_total[5m]))
+      - alert: CampusServiceDown
+        expr: up{job="campus-services"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service_name }} is unavailable'
+      - alert: CampusHighErrorRate
+        expr: sum by (service_name) (rate(http_server_requests_total{http_response_status_code=~"5.."}[5m])) / clamp_min(sum by (service_name) (rate(http_server_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service_name }} has over 5% server errors'

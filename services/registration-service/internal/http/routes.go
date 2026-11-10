@@ -103,7 +103,7 @@ func (h *Handlers) register(c *gin.Context) {
 			httpx.NotFound(c, "Event")
 			return
 		}
-		h.Logger.Error("event lookup failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "event lookup failed", "error", err)
 		httpx.Abort(c, 502, "event catalogue unavailable — retry in a moment")
 		return
 	}
@@ -129,23 +129,24 @@ func (h *Handlers) register(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		h.Logger.Error("register failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "register failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
 
 	if err := h.Events.AdjustCounters(ctx, eventID, 1, 0); err != nil {
-		h.Logger.Warn("capacity counter adjustment failed", "event", eventID, "error", err)
+		h.Logger.WarnContext(c.Request.Context(), "capacity counter adjustment failed", "error", err)
 	}
+	parent := context.WithoutCancel(ctx)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 		defer cancel()
 		if err := h.Tickets.Issue(ctx, IssueRequest{
 			BookingRef: reg.BookingRef, EventID: eventID, EventTitle: event.Title,
 			DateVenueLabel: fmt.Sprintf("%s · %s", event.Date, event.Venue),
 			UserID: claims.UserID, UserName: claims.Name, StudentNumber: claims.StudentNumber,
 		}); err != nil {
-			h.Logger.Warn("credential issuance trigger failed", "bookingRef", reg.BookingRef, "error", err)
+			h.Logger.WarnContext(ctx, "credential issuance trigger failed", "error", err)
 		}
 	}()
 
@@ -225,7 +226,7 @@ func (h *Handlers) checkIn(c *gin.Context) {
 
 	verify, err := h.Tickets.Verify(ctx, body.VcToken)
 	if err != nil {
-		h.Logger.Warn("verification call failed", "error", err)
+		h.Logger.WarnContext(c.Request.Context(), "verification call failed", "error", err)
 		c.JSON(200, gin.H{"outcome": "unavailable", "detail": "Network error — credential unreadable"})
 		return
 	}
@@ -240,7 +241,7 @@ func (h *Handlers) checkIn(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		h.Logger.Error("check-in failed", "error", err)
+		h.Logger.ErrorContext(c.Request.Context(), "check-in failed", "error", err)
 		httpx.Internal(c)
 		return
 	}
@@ -257,10 +258,10 @@ func (h *Handlers) checkIn(c *gin.Context) {
 	}
 
 	if err := h.Events.AdjustCounters(ctx, reg.EventID, 0, 1); err != nil {
-		h.Logger.Warn("checked-in counter adjustment failed", "event", reg.EventID, "error", err)
+		h.Logger.WarnContext(c.Request.Context(), "checked-in counter adjustment failed", "error", err)
 	}
 	if err := h.Tickets.MarkVerified(ctx, reg.BookingRef); err != nil {
-		h.Logger.Warn("credential mark-verified failed", "bookingRef", reg.BookingRef, "error", err)
+		h.Logger.WarnContext(c.Request.Context(), "credential mark-verified failed", "error", err)
 	}
 	c.JSON(200, gin.H{"outcome": "verified", "name": reg.UserName, "studentNumber": reg.StudentNumber})
 }

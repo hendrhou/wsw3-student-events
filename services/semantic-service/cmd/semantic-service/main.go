@@ -19,10 +19,17 @@ import (
 	"github.com/hendrhou/wsw3-student-events/services/shared/authx"
 	"github.com/hendrhou/wsw3-student-events/services/shared/configuration"
 	"github.com/hendrhou/wsw3-student-events/services/shared/httpx"
+	"github.com/hendrhou/wsw3-student-events/services/shared/telemetry"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	observability, err := telemetry.Start("semantic-service")
+	if err != nil {
+		slog.Error("telemetry configuration invalid", "error", err)
+		os.Exit(1)
+	}
+	defer telemetry.Flush(observability)
+	logger := observability.Logger
 	slog.SetDefault(logger)
 
 	cfg, err := configuration.Load([]string{"JWT_SECRET", "SPARQL_ENDPOINT", "SPARQL_UPDATE_ENDPOINT"})
@@ -74,7 +81,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router := gin.New()
-	router.Use(httpx.RequestLogger(logger), httpx.Recovery(logger))
+	router.Use(observability.Middleware(), httpx.RequestLogger(logger), httpx.Recovery(logger))
 	httpx.Healthz(router)
 	shttp.RegisterRoutes(router, &shttp.Handlers{
 		SPARQL:      client,
@@ -84,7 +91,7 @@ func main() {
 	})
 
 	logger.Info("semantic-service listening", "port", cfg.Port, "env", cfg.Env)
-	if err := router.Run(":" + strconv.Itoa(cfg.Port)); err != nil {
+	if err := observability.Serve(router, ":" + strconv.Itoa(cfg.Port)); err != nil {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}

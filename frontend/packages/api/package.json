@@ -12,6 +12,7 @@
     "test:contract": "vitest run src/live.contract.test.ts"
   },
   "dependencies": {
+    "@campus-pulse/telemetry": "workspace:*",
     "zod": "^3.24.1"
   },
   "devDependencies": {
