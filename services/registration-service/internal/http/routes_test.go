@@ -321,6 +321,12 @@ func TestCheckInWrongEvent(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "Wrong event") {
 		t.Errorf("got %q", w.Body.String())
 	}
+	if st.regs[0].Status != "Confirmed" {
+		t.Errorf("wrong-event check-in changed status: got %q", st.regs[0].Status)
+	}
+	if st.regs[0].CheckedInAt != nil {
+		t.Error("wrong-event check-in recorded an attendance time")
+	}
 }
 
 func TestCheckInVerificationUnavailable(t *testing.T) {
