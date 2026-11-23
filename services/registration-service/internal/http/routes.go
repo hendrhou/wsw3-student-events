@@ -57,13 +57,13 @@ type EventView struct {
 }
 
 type IssueRequest struct {
-	BookingRef    string
-	EventID       string
-	EventTitle    string
+	BookingRef     string
+	EventID        string
+	EventTitle     string
 	DateVenueLabel string
-	UserID        string
-	UserName      string
-	StudentNumber string
+	UserID         string
+	UserName       string
+	StudentNumber  string
 }
 
 type VerifyResult struct {
@@ -73,11 +73,11 @@ type VerifyResult struct {
 }
 
 type Handlers struct {
-	Store  Store
-	Events EventClient
+	Store   Store
+	Events  EventClient
 	Tickets TicketClient
-	Issuer *authx.Issuer
-	Logger *slog.Logger
+	Issuer  *authx.Issuer
+	Logger  *slog.Logger
 }
 
 func RegisterRoutes(r *gin.Engine, h *Handlers) {
@@ -144,7 +144,7 @@ func (h *Handlers) register(c *gin.Context) {
 		if err := h.Tickets.Issue(ctx, IssueRequest{
 			BookingRef: reg.BookingRef, EventID: eventID, EventTitle: event.Title,
 			DateVenueLabel: fmt.Sprintf("%s · %s", event.Date, event.Venue),
-			UserID: claims.UserID, UserName: claims.Name, StudentNumber: claims.StudentNumber,
+			UserID:         claims.UserID, UserName: claims.Name, StudentNumber: claims.StudentNumber,
 		}); err != nil {
 			h.Logger.WarnContext(ctx, "credential issuance trigger failed", "error", err)
 		}
@@ -235,6 +235,21 @@ func (h *Handlers) checkIn(c *gin.Context) {
 		return
 	}
 
+	registration, err := h.Store.GetByBookingRef(ctx, verify.BookingRef)
+	if errors.Is(err, store.ErrNotFound) {
+		c.JSON(200, gin.H{"outcome": "invalid", "detail": "Wrong event"})
+		return
+	}
+	if err != nil {
+		h.Logger.ErrorContext(ctx, "registration lookup failed", "error", err)
+		httpx.Internal(c)
+		return
+	}
+	if registration.EventID != c.Param("id") {
+		c.JSON(200, gin.H{"outcome": "invalid", "detail": "Wrong event"})
+		return
+	}
+
 	reg, already, err := h.Store.CheckIn(ctx, verify.BookingRef)
 	if errors.Is(err, store.ErrNotFound) {
 		c.JSON(200, gin.H{"outcome": "invalid", "detail": "Wrong event"})
@@ -275,7 +290,9 @@ type httpEventClient struct {
 	baseURL string
 }
 
-func NewEventClient(baseURL string) EventClient { return &httpEventClient{baseURL: strings.TrimRight(baseURL, "/")} }
+func NewEventClient(baseURL string) EventClient {
+	return &httpEventClient{baseURL: strings.TrimRight(baseURL, "/")}
+}
 
 func (c *httpEventClient) GetEvent(ctx context.Context, id string) (*EventView, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/events/"+id, nil)
@@ -314,7 +331,9 @@ type httpTicketClient struct {
 	baseURL string
 }
 
-func NewTicketClient(baseURL string) TicketClient { return &httpTicketClient{baseURL: strings.TrimRight(baseURL, "/")} }
+func NewTicketClient(baseURL string) TicketClient {
+	return &httpTicketClient{baseURL: strings.TrimRight(baseURL, "/")}
+}
 
 func (c *httpTicketClient) post(ctx context.Context, path string, in, out any) error {
 	payload, _ := json.Marshal(in)
